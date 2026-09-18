@@ -22,8 +22,8 @@ evidence, with corrections added as new entries.
 ## Install with Claude
 
 ```sh
-claude plugin marketplace add <path-to-itakua>
-claude plugin install itakua@itakua
+claude plugin marketplace add el-sapo/itakua --scope user
+claude plugin install itakua@itakua --scope user
 ```
 
 Restart the session after installation. Skills install per agent account, not per machine.
@@ -31,7 +31,7 @@ Restart the session after installation. Skills install per agent account, not pe
 ## Install with Codex
 
 ```sh
-codex plugin marketplace add <path-to-itakua>
+codex plugin marketplace add el-sapo/itakua
 codex plugin add itakua@itakua
 ```
 

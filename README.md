@@ -22,8 +22,8 @@ See the [one-page overview](docs/index.html) for the architecture.
 ## Install with Claude
 
 ```sh
-claude plugin marketplace add <path-to-itakua>
-claude plugin install itakua@itakua
+claude plugin marketplace add el-sapo/itakua --scope user
+claude plugin install itakua@itakua --scope user
 ```
 
 Restart the session afterwards; Claude discovers skills at session start.
@@ -31,7 +31,7 @@ Restart the session afterwards; Claude discovers skills at session start.
 ## Install with Codex
 
 ```sh
-codex plugin marketplace add <path-to-itakua>
+codex plugin marketplace add el-sapo/itakua
 codex plugin add itakua@itakua
 ```
 

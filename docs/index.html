@@ -253,15 +253,15 @@
   <p><strong><span class="path">_tmp/</span> is manual staging.</strong> New nodes include it by default. Scheduled and unattended passes do not process it, and nothing there is deleted without owner approval.</p>
 
   <h2>Install with Claude</h2>
-  <pre>claude plugin marketplace add &lt;this repo&gt;
-claude plugin install itakua@itakua</pre>
+  <pre>claude plugin marketplace add el-sapo/itakua --scope user
+claude plugin install itakua@itakua --scope user</pre>
 
   <div class="note">
     <strong>Then restart your session.</strong> Skills are enumerated when a session starts, so a mid-session install stays invisible — and it fails with the same error as never having installed anything. This cost two test runs to find. Skills also install per <em>account</em>, not per machine: two accounts on one computer need two installs.
   </div>
 
   <h2>Install with Codex</h2>
-  <pre>codex plugin marketplace add &lt;path-to-itakua&gt;
+  <pre>codex plugin marketplace add el-sapo/itakua
 codex plugin add itakua@itakua</pre>
   <div class="note">
     <strong>Then start a new Codex task.</strong> Claude and Codex use separate discovery metadata, but both load the same <code>itakua-map</code> skill and scripts.
