@@ -8,6 +8,7 @@
 *.key
 *.local
 *.skill
+!plugins/itakua/skills/itakua-map/SKILL.md
 *.plugin
 _committed.tar
 *.tar
