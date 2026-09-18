@@ -1,0 +1,12 @@
+# Per-node Drive targets. Copy to .drive-map.local at the ROOT of your brain
+# (beside spaces/), gitignored, and edit.
+# Format: <node path>|<absolute target on THIS machine>
+#
+# The node path is relative to spaces/ — 'guitar', not 'spaces/guitar'. That is also how
+# the convention root maps, so Drive never mirrors the repo's own container folder.
+#
+# Nodes listed here ignore the convention root entirely — point them at a pre-existing
+# folder, a separately-shared folder, or a different Google account.
+#
+# guitar|/path/to/cloud-storage/Guitar
+# projects/demo|/path/to/cloud-storage/Demo

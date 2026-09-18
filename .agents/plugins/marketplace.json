@@ -1,0 +1,20 @@
+{
+  "name": "itakua",
+  "interface": {
+    "displayName": "Itakua"
+  },
+  "plugins": [
+    {
+      "name": "itakua",
+      "source": {
+        "source": "local",
+        "path": "./plugins/itakua"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "name": "itakua",
+  "version": "0.2.1",
+  "description": "Itakua knowledge framework: nested nodes, four safe slots, and the itakua-map skill.",
+  "author": {
+    "name": "Federico Lagarmilla",
+    "url": "https://github.com/el-sapo"
+  },
+  "homepage": "https://github.com/el-sapo/itakua/tree/main/plugins/itakua",
+  "repository": "https://github.com/el-sapo/itakua",
+  "license": "MIT",
+  "keywords": [
+    "second-brain",
+    "knowledge-management",
+    "notes",
+    "pkm"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Itakua",
+    "shortDescription": "A portable, agent-friendly personal knowledge framework.",
+    "longDescription": "Operate an Itakua knowledge base with nested nodes, approval-aware slots, Drive artifact indexes, and validation tooling.",
+    "developerName": "Federico Lagarmilla",
+    "category": "Productivity",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/el-sapo/itakua",
+    "defaultPrompt": [
+      "Help me operate an Itakua node safely.",
+      "Create a new knowledge base with the Itakua framework."
+    ]
+  }
+}

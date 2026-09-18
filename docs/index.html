@@ -1,0 +1,277 @@
+<title>Itakua</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,500;6..72,600&amp;family=Public+Sans:wght@400;600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+  :root {
+    --ground:  #F1F3F5;
+    --surface: #FFFFFF;
+    --ink:     #1C2530;
+    --muted:   #5C6B7A;
+    --line:    #D3DAE0;
+    --git:     #2F5D8C;
+    --cloud:   #B07A2B;
+    --git-fill:   #E5EDF5;
+    --cloud-fill: #F7EEDC;
+
+    --display: "Newsreader", Georgia, "Times New Roman", serif;
+    --body: "Public Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:  #14181C;
+      --surface: #1B2026;
+      --ink:     #E3E8ED;
+      --muted:   #93A1AE;
+      --line:    #2C343C;
+      --git:     #7FA8D4;
+      --cloud:   #D9A650;
+      --git-fill:   #1D2A36;
+      --cloud-fill: #2B2418;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground:  #14181C;
+    --surface: #1B2026;
+    --ink:     #E3E8ED;
+    --muted:   #93A1AE;
+    --line:    #2C343C;
+    --git:     #7FA8D4;
+    --cloud:   #D9A650;
+    --git-fill:   #1D2A36;
+    --cloud-fill: #2B2418;
+  }
+
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 16px;
+    line-height: 1.6;
+  }
+  .wrap {
+    max-width: 860px;
+    margin: 0 auto;
+    padding-inline: 20px;
+    padding-block: 56px 72px;
+  }
+  h1, h2 {
+    font-family: var(--display);
+    font-weight: 600;
+    text-wrap: balance;
+    line-height: 1.2;
+    margin: 0;
+  }
+  h1 { font-size: clamp(2rem, 5vw, 2.75rem); letter-spacing: -0.01em; }
+  h2 { font-size: 1.35rem; margin-top: 3rem; }
+  p { margin: 0.9rem 0; max-width: 66ch; }
+  .lede { font-size: 1.1rem; color: var(--muted); max-width: 60ch; margin-top: 0.6rem; }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 0.9rem;
+  }
+  code, .path { font-family: var(--mono); font-size: 0.88em; }
+  .path-git   { color: var(--git); }
+  .path-cloud { color: var(--cloud); }
+
+  figure { margin: 2.25rem 0 0; }
+  .figbox { overflow-x: auto; }
+  svg { display: block; width: 100%; min-width: 620px; height: auto; color: var(--ink); }
+  figcaption {
+    font-size: 0.88rem;
+    color: var(--muted);
+    margin-top: 0.9rem;
+    max-width: 62ch;
+  }
+
+  /* diagram: classes, not var() in presentation attributes (unreliable) */
+  .d-ink   { fill: var(--ink); }
+  .d-mut   { fill: var(--muted); }
+  .d-git   { fill: var(--git); }
+  .d-cloud { fill: var(--cloud); }
+  .d-surf  { fill: var(--surface); }
+  .d-gfill { fill: var(--git-fill); }
+  .d-cfill { fill: var(--cloud-fill); }
+  .d-none  { fill: none; }
+  .s-ink   { stroke: var(--ink); }
+  .s-git   { stroke: var(--git); }
+  .s-cloud { stroke: var(--cloud); }
+  .t-mono  { font-family: var(--mono); }
+  .t-body  { font-family: var(--body); }
+  .t-lbl   { font-family: var(--mono); font-size: 10px; letter-spacing: 1.2px; fill: var(--muted); }
+
+  table { border-collapse: collapse; width: 100%; margin-top: 1rem; font-size: 0.94rem; }
+  th, td { text-align: left; padding: 0.6rem 0.9rem 0.6rem 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; font-family: var(--mono); }
+  td:first-child { white-space: nowrap; font-family: var(--mono); font-size: 0.86rem; }
+
+  pre {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--git);
+    padding: 0.9rem 1rem;
+    overflow-x: auto;
+    font-family: var(--mono);
+    font-size: 0.83rem;
+    line-height: 1.65;
+    margin: 1rem 0;
+  }
+  .note {
+    border-left: 3px solid var(--cloud);
+    background: var(--cloud-fill);
+    padding: 0.8rem 1rem;
+    margin: 1.4rem 0;
+    font-size: 0.94rem;
+  }
+  .note strong { font-weight: 600; }
+  hr { border: 0; border-top: 1px solid var(--line); margin: 3rem 0 0; }
+  footer { color: var(--muted); font-size: 0.85rem; margin-top: 1.2rem; }
+  a { color: var(--git); }
+</style>
+
+<div class="wrap">
+  <p class="eyebrow">itakua</p>
+  <h1>A safe map for a personal knowledge base</h1>
+  <p class="lede">Itakua decides where every file goes, which writes need approval, and how the tooling keeps a brain honest about its declared boundaries.</p>
+
+  <h2>What's here</h2>
+  <table>
+    <thead>
+      <tr><th>Plugin</th><th>What it does</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>itakua</td>
+        <td>Nodes, four slots, per-node READMEs. Stands a brain up, then validates it — including whether the repository's git remote and identity match what the brain says they are.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>How Itakua is put together</h2>
+  <p>One folder tree, two storage systems, and they never overlap. That is the whole idea — everything else follows from keeping those subtrees disjoint.</p>
+
+  <figure>
+    <div class="figbox">
+      <svg viewBox="0 0 900 470" role="img" aria-label="Three layers. The plugin, installed in your agent, operates on a node. The node holds four slots: notes, log, docs and _tmp. Notes and log are committed to a local git repository. Docs is a symlink out to cloud storage. _tmp is manual staging in neither system and is never processed automatically.">
+        <defs>
+          <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" class="d-ink"></path>
+          </marker>
+          <marker id="ar-git" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" class="d-git"></path>
+          </marker>
+          <marker id="ar-cloud" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" class="d-cloud"></path>
+          </marker>
+        </defs>
+
+        <!-- band labels -->
+        <text x="0" y="50" class="t-lbl">LAYER 3</text>
+        <text x="0" y="64" class="t-lbl">RULES</text>
+
+        <text x="0" y="178" class="t-lbl">LAYER 2</text>
+        <text x="0" y="192" class="t-lbl">THE TREE</text>
+
+        <text x="0" y="368" class="t-lbl">LAYER 1</text>
+        <text x="0" y="382" class="t-lbl">STORAGE</text>
+
+        <!-- Layer 3: the plugin -->
+        <rect x="100" y="22" width="780" height="52" rx="6" stroke-width="1" stroke-dasharray="5 4" class="d-surf s-ink"></rect>
+        <text x="490" y="45" text-anchor="middle" font-size="13" font-weight="600" class="t-body d-ink">the itakua plugin · itakua-map skill</text>
+        <text x="490" y="62" text-anchor="middle" font-size="11.5" class="t-body d-mut">installed in your agent, not in the brain — one copy serves every brain on the machine</text>
+
+        <line x1="490" y1="74" x2="490" y2="108" class="s-ink" stroke-width="1.2" marker-end="url(#ar)"></line>
+        <text x="500" y="96" font-size="10.5" class="t-mono d-mut">decides where things go</text>
+
+        <!-- Layer 2: the node -->
+        <rect x="100" y="110" width="780" height="140" rx="6" stroke-width="1.4" class="d-surf s-ink"></rect>
+        <text x="114" y="133" font-size="12.5" font-weight="500" class="t-mono d-ink">spaces/guitar/</text>
+        <text x="235" y="133" font-size="11.5" class="t-body d-mut">— a node: any folder with a README.md</text>
+
+        <!-- four slots -->
+        <rect x="114" y="150" width="177" height="86" rx="4" stroke-width="1" class="d-gfill s-git"></rect>
+        <text x="202" y="176" text-anchor="middle" font-size="13" font-weight="500" class="t-mono d-git">notes/</text>
+        <text x="202" y="196" text-anchor="middle" font-size="11" class="t-body d-mut">distilled knowledge</text>
+        <text x="202" y="212" text-anchor="middle" font-size="11" class="t-body d-mut">edits need approval</text>
+
+        <rect x="305" y="150" width="177" height="86" rx="4" stroke-width="1" class="d-gfill s-git"></rect>
+        <text x="393" y="176" text-anchor="middle" font-size="13" font-weight="500" class="t-mono d-git">log/</text>
+        <text x="393" y="196" text-anchor="middle" font-size="11" class="t-body d-mut">dated raw evidence</text>
+        <text x="393" y="212" text-anchor="middle" font-size="11" class="t-body d-mut">append-only</text>
+
+        <rect x="496" y="150" width="177" height="86" rx="4" stroke-width="1" class="d-cfill s-cloud"></rect>
+        <text x="584" y="176" text-anchor="middle" font-size="13" font-weight="500" class="t-mono d-cloud">docs/</text>
+        <text x="584" y="196" text-anchor="middle" font-size="11" class="t-body d-mut">PDFs, audio, video</text>
+        <text x="584" y="212" text-anchor="middle" font-size="11" class="t-body d-mut">durable writes need approval</text>
+
+        <rect x="687" y="150" width="177" height="86" rx="4" fill="none" class="s-ink" stroke-width="1" stroke-dasharray="4 4" opacity="0.6"></rect>
+        <text x="775" y="176" text-anchor="middle" font-size="13" font-weight="500" class="t-mono d-ink">_tmp/</text>
+        <text x="775" y="196" text-anchor="middle" font-size="11" class="t-body d-mut">manual staging</text>
+        <text x="775" y="212" text-anchor="middle" font-size="11" class="t-body d-mut">no auto-processing/deletion</text>
+
+        <!-- arrows down to storage -->
+        <path d="M 202 236 L 202 285 L 290 285 L 290 322" fill="none" class="s-git" stroke-width="1.4" marker-end="url(#ar-git)"></path>
+        <path d="M 393 236 L 393 285 L 310 285 L 310 322" fill="none" class="s-git" stroke-width="1.4" marker-end="url(#ar-git)"></path>
+        <text x="410" y="277" font-size="10.5" class="t-mono d-git">committed</text>
+
+        <line x1="584" y1="236" x2="584" y2="322" class="s-cloud" stroke-width="1.4" marker-end="url(#ar-cloud)"></line>
+        <text x="594" y="283" font-size="10.5" class="t-mono d-cloud">docs/drive → symlink</text>
+
+        <line x1="775" y1="236" x2="775" y2="300" class="s-ink" stroke-width="1.2" stroke-dasharray="4 4" opacity="0.5"></line>
+        <text x="775" y="322" text-anchor="middle" font-size="11.5" font-style="italic" class="t-body d-mut">in neither system</text>
+
+        <!-- Layer 1: storage -->
+        <rect x="160" y="324" width="280" height="76" rx="6" stroke-width="1.4" class="d-surf s-git"></rect>
+        <text x="300" y="352" text-anchor="middle" font-size="13" font-weight="600" class="t-body d-git">a local git repository</text>
+        <text x="300" y="371" text-anchor="middle" font-size="11" class="t-body d-mut">plain markdown, versioned, greppable</text>
+        <text x="300" y="387" text-anchor="middle" font-size="11" class="t-body d-mut">a remote only if you choose one</text>
+
+        <rect x="496" y="324" width="240" height="76" rx="6" stroke-width="1.4" class="d-surf s-cloud"></rect>
+        <text x="616" y="352" text-anchor="middle" font-size="13" font-weight="600" class="t-body d-cloud">cloud storage</text>
+        <text x="616" y="371" text-anchor="middle" font-size="11" class="t-body d-mut">separate infrastructure,</text>
+        <text x="616" y="387" text-anchor="middle" font-size="11" class="t-body d-mut">its own account, its own sync</text>
+
+        <text x="100" y="432" font-size="11.5" class="t-body d-mut">git never sees the binaries · Drive never sees the markdown · the two subtrees are disjoint by construction</text>
+      </svg>
+    </div>
+    <figcaption>Every file in a node lands in exactly one of three places. <span class="path-git">notes/</span> and <span class="path-git">log/</span> are committed; <span class="path-cloud">docs/</span> is a symlink into cloud storage and is gitignored; <span class="path">_tmp/</span> is in neither, on purpose.</figcaption>
+  </figure>
+
+  <h2>The parts worth knowing</h2>
+
+  <p><strong>A node is any folder with a <code>README.md</code>.</strong> All nodes live under <code>spaces/</code>. Nesting means containment, not lifecycle — a project inside a space is nested because it lives there, not because it ends. Whether a node ever finishes is something its own README declares.</p>
+
+  <p><strong>Four slots, and one rule that closes the system:</strong> a folder is either a slot, or a child node with its own README. Anything else is temporary. That single sentence is what the validator enforces, which is why the structure doesn't quietly rot into invented folders.</p>
+
+  <p><strong><span class="path-git">notes/</span> changes with owner approval; <span class="path-git">log/</span> is append-only.</strong> Notes say what's true now. Logs preserve dated raw evidence, and corrections arrive as later entries instead of rewriting history.</p>
+
+  <p><strong><span class="path-cloud">docs/</span> is the durable-artifact boundary.</strong> Creation and editing require owner approval. Binaries live in cloud storage; git holds an approved generated index so the Markdown side knows what exists.</p>
+
+  <p><strong><span class="path">_tmp/</span> is manual staging.</strong> New nodes include it by default. Scheduled and unattended passes do not process it, and nothing there is deleted without owner approval.</p>
+
+  <h2>Install with Claude</h2>
+  <pre>claude plugin marketplace add &lt;this repo&gt;
+claude plugin install itakua@itakua</pre>
+
+  <div class="note">
+    <strong>Then restart your session.</strong> Skills are enumerated when a session starts, so a mid-session install stays invisible — and it fails with the same error as never having installed anything. This cost two test runs to find. Skills also install per <em>account</em>, not per machine: two accounts on one computer need two installs.
+  </div>
+
+  <h2>Install with Codex</h2>
+  <pre>codex plugin marketplace add &lt;path-to-itakua&gt;
+codex plugin add itakua@itakua</pre>
+  <div class="note">
+    <strong>Then start a new Codex task.</strong> Claude and Codex use separate discovery metadata, but both load the same <code>itakua-map</code> skill and scripts.
+  </div>
+
+  <h2>Start a brain</h2>
+  <pre>new-brain.sh ~/Documents/mybrain "My Brain" \
+  --identity "Your Name &lt;you@example.com&gt;"</pre>
+  <p>Add <code>--local-only</code> for a brain whose material must never reach a hosted remote — it configures no remote, which is the entire control. Then run the validator; it will tell you what the brain still needs.</p>
+
+  <hr>
+  <footer>Your knowledge stays in plain markdown, in a git repository you own. The framework has no opinion on which accounts you use — a brain binds its own path, git remote, storage account and agent account, and declares them in its README.</footer>
+</div>

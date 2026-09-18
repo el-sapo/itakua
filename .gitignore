@@ -1,0 +1,14 @@
+.DS_Store
+._*
+.obsidian/
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.local
+*.skill
+*.plugin
+_committed.tar
+*.tar
+*.tgz

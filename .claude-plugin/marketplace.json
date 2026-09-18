@@ -1,0 +1,14 @@
+{
+  "name": "itakua",
+  "owner": {
+    "name": "Federico Lagarmilla"
+  },
+  "plugins": [
+    {
+      "name": "itakua",
+      "source": "./plugins/itakua",
+      "description": "Itakua knowledge framework: spaces, nested nodes, four safe slots, and the itakua-map skill."
+    }
+  ],
+  "description": "Itakua: a portable, agent-friendly framework for personal knowledge bases."
+}

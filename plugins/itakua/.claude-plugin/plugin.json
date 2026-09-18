@@ -1,0 +1,15 @@
+{
+  "name": "itakua",
+  "version": "0.2.1",
+  "description": "Itakua knowledge framework: nested nodes, four safe slots, and the itakua-map skill.",
+  "author": {
+    "name": "Federico Lagarmilla"
+  },
+  "license": "MIT",
+  "keywords": [
+    "second-brain",
+    "knowledge-management",
+    "notes",
+    "pkm"
+  ]
+}
