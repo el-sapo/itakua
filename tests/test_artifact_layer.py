@@ -14,9 +14,12 @@ import unittest
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SCRIPTS = REPO_ROOT / "plugins" / "itakua" / "skills" / "itakua-map" / "scripts"
-VALIDATOR = SCRIPTS / "check-structure.py"
-LINKER = SCRIPTS / "link-drive.sh"
+SKILLS = REPO_ROOT / "plugins" / "itakua" / "skills"
+MAP_SCRIPTS = SKILLS / "itakua-map" / "scripts"
+SETUP_SCRIPTS = SKILLS / "itakua-setup" / "scripts"
+VALIDATOR = MAP_SCRIPTS / "check-structure.py"
+LINKER = SETUP_SCRIPTS / "link-drive.sh"
+NEW_BRAIN = SETUP_SCRIPTS / "new-brain.sh"
 
 
 class ArtifactLayerBehaviorTests(unittest.TestCase):
@@ -164,6 +167,51 @@ class ArtifactLayerBehaviorTests(unittest.TestCase):
             self.assertTrue(os.path.samefile(link, target))
             self.assertFalse((filing / "docs" / "drive").is_symlink())
             self.assertFalse((drive_root / "project" / "notes" / "topic").exists())
+
+    def test_new_brain_uses_skill_pointers_without_copying_machine_paths(self):
+        with tempfile.TemporaryDirectory() as temp:
+            brain = Path(temp) / "portable-brain"
+            created = subprocess.run(
+                [
+                    "bash",
+                    str(NEW_BRAIN),
+                    str(brain),
+                    "Portable Brain",
+                    "--identity",
+                    "Test User <test@example.com>",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+
+            self.assertEqual(created.returncode, 0, created.stdout + created.stderr)
+            readme = (brain / "README.md").read_text(encoding="utf-8")
+            pointers = "\n".join(
+                (brain / name).read_text(encoding="utf-8")
+                for name in ("CLAUDE.md", "AGENTS.md")
+            )
+            self.assertFalse((brain / "skill").exists())
+            self.assertNotIn(str(REPO_ROOT), readme)
+            self.assertNotIn("plugins/cache", readme)
+            self.assertIn("itakua-map", readme)
+            self.assertIn("itakua-setup", readme)
+            self.assertIn("itakua-setup", pointers)
+
+            rejected = subprocess.run(
+                [
+                    "bash",
+                    str(NEW_BRAIN),
+                    str(Path(temp) / "copied-skill-brain"),
+                    "Copied Skill Brain",
+                    "--with-skill",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertIn("unknown flag", self.output(rejected))
 
 
 if __name__ == "__main__":

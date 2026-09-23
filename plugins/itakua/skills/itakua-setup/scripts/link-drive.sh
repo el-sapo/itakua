@@ -3,7 +3,7 @@
 #
 # RUN FROM THE ROOT OF THE BRAIN REPO, from a real terminal on the Mac:
 #
-#   ./skill/scripts/link-drive.sh "/absolute/path/to/cloud-root"
+#   <itakua-setup>/scripts/link-drive.sh "/absolute/path/to/cloud-root"
 #
 # Portable mappings live in committed `drive-map` at the brain root:
 #
@@ -19,7 +19,7 @@
 # reported as unmapped so an agent or owner can resolve the gap; the script does not guess.
 # For a deliberately greenfield layout, opt into <ROOT>/<node path> creation explicitly:
 #
-#   ./skill/scripts/link-drive.sh --convention "/absolute/path/to/cloud-root"
+#   <itakua-setup>/scripts/link-drive.sh --convention "/absolute/path/to/cloud-root"
 #
 # Agents working through a hosted bridge may not see local absolute paths. In that case,
 # run this script yourself from the machine that owns the cloud mirror.
@@ -73,13 +73,6 @@ fi
 
 PORTABLE_MAP="drive-map"
 LOCAL_MAP=".drive-map.local"
-# Older brains kept the local map inside the framework directory. Preserve that fallback
-# long enough for an agent to migrate it, but say exactly which file is active.
-if [ ! -f "$LOCAL_MAP" ] && [ -f "skill/scripts/drive-map.local" ]; then
-  LOCAL_MAP="skill/scripts/drive-map.local"
-  echo "  note: using the legacy local map at $LOCAL_MAP" >&2
-  echo "        move it to .drive-map.local at the brain root" >&2
-fi
 
 lookup() {  # map file, node -> mapped value, or empty
   [ -f "$1" ] || return 0

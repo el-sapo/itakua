@@ -1,7 +1,7 @@
 {
   "name": "itakua",
-  "version": "0.2.2",
-  "description": "Itakua knowledge framework: nested nodes, four safe slots, and the itakua-map skill.",
+  "version": "0.3.0",
+  "description": "Itakua knowledge framework with separate operating and machine-setup skills.",
   "author": {
     "name": "Federico Lagarmilla"
   },

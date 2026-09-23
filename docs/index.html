@@ -180,8 +180,8 @@
 
         <!-- Layer 3: the plugin -->
         <rect x="100" y="22" width="780" height="52" rx="6" stroke-width="1" stroke-dasharray="5 4" class="d-surf s-ink"></rect>
-        <text x="490" y="45" text-anchor="middle" font-size="13" font-weight="600" class="t-body d-ink">the itakua plugin · itakua-map skill</text>
-        <text x="490" y="62" text-anchor="middle" font-size="11.5" class="t-body d-mut">installed in your agent, not in the brain — one copy serves every brain on the machine</text>
+        <text x="490" y="45" text-anchor="middle" font-size="13" font-weight="600" class="t-body d-ink">the itakua plugin · itakua-map + itakua-setup</text>
+        <text x="490" y="62" text-anchor="middle" font-size="11.5" class="t-body d-mut">installed in your agent account, not copied into each brain</text>
 
         <line x1="490" y1="74" x2="490" y2="108" class="s-ink" stroke-width="1.2" marker-end="url(#ar)"></line>
         <text x="500" y="96" font-size="10.5" class="t-mono d-mut">decides where things go</text>
@@ -264,13 +264,13 @@ claude plugin install itakua@itakua --scope user</pre>
   <pre>codex plugin marketplace add el-sapo/itakua
 codex plugin add itakua@itakua</pre>
   <div class="note">
-    <strong>Then start a new Codex task.</strong> Claude and Codex use separate discovery metadata, but both load the same <code>itakua-map</code> skill and scripts.
+    <strong>Then start a new Codex task.</strong> Claude and Codex use separate discovery metadata, but both load <code>itakua-map</code> for normal operation and <code>itakua-setup</code> for creation or machine repair.
   </div>
 
   <h2>Start a brain</h2>
-  <pre>new-brain.sh ~/Documents/mybrain "My Brain" \
+  <pre>&lt;plugin&gt;/skills/itakua-setup/scripts/new-brain.sh ~/Documents/mybrain "My Brain" \
   --identity "Your Name &lt;you@example.com&gt;"</pre>
-  <p>Add <code>--local-only</code> for a brain whose material must never reach a hosted remote — it configures no remote, which is the entire control. Then run the validator; it will tell you what the brain still needs.</p>
+  <p>Add <code>--local-only</code> for a brain whose material must never reach a hosted remote — it configures no remote, which is the entire control. After cloning on another machine, load <code>itakua-setup</code>; it repairs local identity, staging folders, and artifact attachments without storing a plugin-cache path in the brain.</p>
 
   <hr>
   <footer>Your knowledge stays in plain markdown, in a git repository you own. The framework has no opinion on which accounts you use — a brain binds its own path, git remote, storage account and agent account, and declares them in its README.</footer>

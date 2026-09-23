@@ -5,18 +5,12 @@
 #   ./new-brain.sh ~/Documents/mybrain "My Brain" --identity "You <you@example.com>"
 #
 # Run it from anywhere; it creates the folder, the spine and a git repo with NO
-# remote. The framework itself is not copied in: it lives in the installed skill,
-# which applies to every brain operated by that account. One copy, no drift.
+# remote. The framework itself is not copied in: it lives in the installed plugin
+# skills, which apply to every brain operated by that account. One maintained install.
 #
 # --local-only  marks the brain as never-published in its README, and records the
 #               two-way boundary. There is no remote to push to, which is the
 #               actual control; this documents why, for whoever reads it later.
-#
-# --with-skill  ALSO copy the skill into skill/, so the brain can be stood up from
-#               a clone alone where the skill is not installed. Costs you a second
-#               copy of the framework that can drift from the source. Note that it
-#               does NOT copy .packaged, so drift detection stays off in the new
-#               brain — the generated README says so and gives the command.
 #
 # --identity "Name <email>"
 #               Set this brain's git identity LOCALLY, so commits here cannot be
@@ -34,14 +28,13 @@
 
 set -euo pipefail
 
-LOCAL_ONLY=""; WITH_SKILL=""; IDENTITY=""; INTO_EXISTING=""; POSITIONAL=(); NPOS=0
+LOCAL_ONLY=""; IDENTITY=""; INTO_EXISTING=""; POSITIONAL=(); NPOS=0
 
 # Parse flags BEFORE reading positionals, or `new-brain.sh --local-only ~/foo "X"`
 # creates a directory literally named "--local-only".
 while [ $# -gt 0 ]; do
   case "$1" in
     --local-only)    LOCAL_ONLY=1 ;;
-    --with-skill)    WITH_SKILL=1 ;;
     --into-existing) INTO_EXISTING=1 ;;
     --identity)      shift; IDENTITY="${1:-}" ;;
     --*) echo "error: unknown flag $1" >&2; exit 1 ;;
@@ -53,8 +46,8 @@ done
 DEST="${POSITIONAL[0]:-}"; NAME="${POSITIONAL[1]:-}"
 
 usage() {
-  echo "usage: new-brain.sh <path> <name> [--local-only] [--with-skill]" >&2
-  echo "                    [--into-existing] [--identity \"Name <email>\"]" >&2
+  echo "usage: new-brain.sh <path> <name> [--local-only] [--into-existing]" >&2
+  echo "                    [--identity \"Name <email>\"]" >&2
 }
 
 if [ -z "$DEST" ] || [ -z "$NAME" ]; then usage; exit 1; fi
@@ -84,12 +77,6 @@ if [ -e "$DEST" ] && [ -n "$(ls -A "$DEST" 2>/dev/null)" ] && [ -z "$INTO_EXISTI
   exit 1
 fi
 
-# Where this script lives: the installed skill, or a repo's skill/scripts/.
-SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-for f in SKILL.md scripts/check-structure.py; do
-  [ -f "$SRC/$f" ] || { echo "error: cannot find $f next to this script ($SRC)" >&2; exit 1; }
-done
-
 KEPT=""
 # Write stdin to $1, but never over a file that is already there.
 write_file() {
@@ -99,16 +86,6 @@ write_file() {
 
 mkdir -p "$DEST"/{00-inbox,spaces}
 touch "$DEST/00-inbox/.gitkeep" "$DEST/spaces/.gitkeep"
-if [ -n "$WITH_SKILL" ]; then
-  mkdir -p "$DEST"/skill/{scripts,assets/template/notes,assets/template/log,assets/template/_tmp}
-  cp "$SRC/SKILL.md" "$DEST/skill/"
-  cp "$SRC"/scripts/*.py "$SRC"/scripts/*.sh "$SRC"/scripts/*.example "$DEST/skill/scripts/" 2>/dev/null || true
-  [ -f "$SRC/assets/template/README.md" ] && cp "$SRC/assets/template/README.md" "$DEST/skill/assets/template/"
-  touch "$DEST/skill/assets/template/notes/.gitkeep" \
-        "$DEST/skill/assets/template/log/.gitkeep" \
-        "$DEST/skill/assets/template/_tmp/.gitkeep"
-  chmod +x "$DEST"/skill/scripts/*.sh 2>/dev/null || true
-fi
 
 write_file "$DEST/.gitignore" <<'EOF'
 # --- macOS noise ---
@@ -146,7 +123,6 @@ write_file "$DEST/.gitignore" <<'EOF'
 .coda/
 _tmp/
 .drive-map.local
-skill/scripts/*.local
 *.skill
 EOF
 
@@ -165,14 +141,16 @@ write_file "$DEST/CLAUDE.md" <<EOF
 This repository is an Itakua brain. **The framework is not described here** — it
 lives in the \`itakua-map\` skill. Load it before reading, writing or filing anything.
 
-See \`README.md\` for how to stand this up on a new machine.
+For a fresh clone or another setup/repair symptom, load \`itakua-setup\`. See
+\`README.md\` for this brain's bindings.
 EOF
 
 write_file "$DEST/AGENTS.md" <<EOF
 # $NAME
 
 This repository is an Itakua brain. Load the \`itakua-map\` skill before reading,
-writing, or filing anything. See \`README.md\` for setup and bindings.
+writing, or filing anything. For a fresh clone or another setup/repair symptom,
+load \`itakua-setup\`. See \`README.md\` for bindings.
 EOF
 
 if [ -n "$LOCAL_ONLY" ]; then
@@ -189,13 +167,12 @@ cat <<EOF
 # $NAME
 
 A personal knowledge base: distilled knowledge in git as markdown, binary artifacts in cloud
-storage surfaced through symlinks, and the rules for operating it in the
-**\`itakua-map\` skill**${WITH_SKILL:+, a copy of which is in \`skill/\`}.
+storage surfaced through symlinks, normal operating rules in **\`itakua-map\`**, and
+per-machine setup procedures in **\`itakua-setup\`**.
 
 \`\`\`
 $(basename "$DEST")/
-├── README.md      ← you are here. How to stand this up from a clone${WITH_SKILL:+
-├── skill/         ← the framework, installable. SKILL.md + template + scripts}
+├── README.md      ← you are here. Bindings and clone setup
 ├── drive-map      ← portable node-to-artifact-folder mappings
 ├── 00-inbox/      ← capture anything, sort later
 └── spaces/         ← all content. Each folder is a node with its own README
@@ -243,106 +220,36 @@ check when something goes to the wrong place.
 Mark which of these are **constraints** and which are **preferences**. They look identical
 here, and a constraint you can relax by accident is not a constraint.
 
-\`check-structure.py --git\` reads the first three back off the repository and compares them
-to this table. Run it after anything that touches git.
+The validator in \`itakua-map\` compares the declared Git remote and identity with the
+repository. Run it after anything that touches git.
 EOF
 
-if [ -n "$WITH_SKILL" ]; then
 cat <<'EOF'
 
 ## Setting this up on a new machine
 
-**1. The framework is in `skill/`**, copied in when this brain was scaffolded. Install
-it into whichever agent you use — **a skill installs per agent account, not per machine**,
-so every account that operates this brain needs its own install.
-
-> **Drift detection is off in this brain.** `--with-skill` deliberately does not copy
-> `skill/.packaged`, because that stamp asserts "packaged *and installed*", which was not
-> true at scaffold time. Once you have actually installed this copy, turn it on:
->
-> ```sh
-> python3 skill/scripts/check-structure.py --stamp
-> ```
-
-**2. Verify the structure is intact.**
-
-```sh
-python3 skill/scripts/check-structure.py --git
-```
-
-**3. Attach artifacts (optional).** If this brain references cloud-synced documents,
-mark each folder **Available offline** — a streamed folder does not even enumerate
-for an agent — then create the symlinks once per machine:
-
-```sh
-skill/scripts/link-drive.sh "<your cloud root>"
-```
-
-Portable node-to-folder mappings live in committed `drive-map`, relative to the cloud
-root. Use `.drive-map.local` only for a machine-specific absolute override, such as a
-different account or sharing scope. For a new greenfield layout that deliberately mirrors
-node paths, opt into convention mode with `--convention`.
-
-## Creating the first node
-
-```sh
-skill/scripts/new-node.sh spaces/<node>
-# with owner approval, edit the README placeholders
-python3 skill/scripts/check-structure.py
-```
-EOF
-else
-cat <<'EOF'
-
-## Setting this up on a new machine
-
-**1. Install the `itakua-map` skill** into whichever agent you use. Nothing in this
-repository explains the structure, and that is deliberate: the framework lives in
-one installed copy that serves every brain that account operates.
+**1. Install the Itakua plugin** into whichever agent you use. It supplies both
+`itakua-map` and `itakua-setup`; framework code is not copied into this brain.
 
 **A skill installs per agent account, not per machine.** A second account on the same
 computer starts with nothing, and this is the step people skip.
 
-**2. Verify the structure is intact.**
+**2. Start a fresh agent session**, then ask it to load `itakua-setup` and bring this
+clone into working order. The setup skill checks repository-local Git identity, restores
+declared `_tmp/` folders, validates the tree, and attaches mapped artifacts when their
+machine-local cloud root is available.
 
-```sh
-python3 @SKILL@/scripts/check-structure.py --git
-```
-
-**3. Attach artifacts (optional).** If this brain references cloud-synced documents,
-mark each folder **Available offline** — a streamed folder does not even enumerate
-for an agent — then create the symlinks once per machine:
-
-```sh
-@SKILL@/scripts/link-drive.sh "<your cloud root>"
-```
-
-Portable node-to-folder mappings live in committed `drive-map`, relative to the cloud
-root. Use `.drive-map.local` only for a machine-specific absolute override, such as a
-different account or sharing scope. For a new greenfield layout that deliberately mirrors
-node paths, opt into convention mode with `--convention`.
+Portable node-to-folder mappings live in committed `drive-map`. Machine-specific absolute
+overrides live in gitignored `.drive-map.local`.
 
 ## Creating the first node
 
-```sh
-@SKILL@/scripts/new-node.sh spaces/<node>
-# with owner approval, edit the README placeholders
-python3 @SKILL@/scripts/check-structure.py
-```
+After setup, load `itakua-map` and ask the agent to create `spaces/<node>`. That skill owns
+normal node creation and validation; keep machine-specific installed-skill paths out of
+this repository.
 EOF
-fi
 } > "$TMPR"
 
-# Point the README's commands at wherever the framework actually is on this machine.
-# Absolute, so the README's commands work from anywhere and are unambiguous.
-# Done on the temp copy, then written: `{ ... } | write_file` would run write_file in
-# a SUBSHELL, and the list of kept files it records would be discarded with it.
-if [ -z "$WITH_SKILL" ]; then
-  python3 - "$TMPR" "$SRC" <<'PYEOF'
-import sys, pathlib
-p = pathlib.Path(sys.argv[1]); p.write_text(p.read_text().replace("@SKILL@", sys.argv[2]))
-PYEOF
-fi
 write_file "$DEST/README.md" < "$TMPR"
 
 cd "$DEST"
@@ -375,11 +282,7 @@ if [ -n "$KEPT" ]; then
   echo "   kept (already present, not overwritten):$KEPT"
 fi
 [ -n "$LOCAL_ONLY" ] && echo "   local-only: no remote configured, and none should be added"
-if [ -n "$WITH_SKILL" ]; then
-  echo "   framework: copied into skill/ — drift detection is OFF until you run --stamp"
-else
-  echo "   framework: the installed itakua-map skill (no copy in this folder)"
-fi
+echo "   framework: installed plugin skills itakua-map + itakua-setup (no copy here)"
 if [ -n "$IDENTITY" ]; then
   echo "   git identity: $(git config --local user.name) <$(git config --local user.email)> (local to this repo)"
 else

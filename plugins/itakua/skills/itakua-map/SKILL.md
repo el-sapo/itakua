@@ -14,6 +14,10 @@ not decorative.
 per-node, not globally. This skill tells you how the system works; the node's README tells
 you what *that* node is and what its own slots hold.
 
+If the brain is being created, has just been cloned or moved, or reports a missing local
+attachment, Git identity, or declared `_tmp/`, load `itakua-setup` after this map. That
+skill owns machine setup and repair; return here for normal operation.
+
 ## Nodes
 
 Any folder with a `README.md` is a **node**. Nodes nest, and every node — at any depth —
@@ -228,28 +232,11 @@ there is short and fixed:
 | `CLAUDE.md` / `AGENTS.md` | Three-line pointers to `README.md`. Pointers, never copies |
 | `drive-map` | Optional committed mapping from node paths to artifact paths relative to the cloud root |
 | `.drive-map.local` | Optional gitignored absolute overrides for this machine only |
-| `skill/` | Only in a brain created with `--with-skill` |
 | `.gitignore` | |
 
 Anything else at the root is drift. `check-structure.py` only walks `spaces/`, so nothing
 catches it for you. **A dated event or a piece of knowledge never belongs at the root** —
 it belongs in a node, which is what the two filing questions are for.
-
-### Drive mappings
-
-`drive-map` preserves the part that belongs to the brain: which cloud folder corresponds
-to which node. Each non-comment line is `<node path>|<path relative to the artifact root>`;
-node paths are relative to `spaces/`. `.drive-map.local` uses the same node key with an
-absolute target and wins when present, for genuine machine-specific exceptions.
-
-An indexed node missing from both maps is an actionable setup gap, not permission to
-guess. Convention mode is an explicit greenfield choice for creating `<root>/<node path>`;
-it is never the silent fallback for an existing indexed artifact layer.
-
-To migrate an existing `.drive-map.local`, turn each target beneath the common artifact
-root into a relative `drive-map` entry, then review and commit that portable file. Keep a
-target outside the common root in `.drive-map.local`; a new machine will surface that node
-as unmapped until its own override is supplied.
 
 ### `00-inbox/`
 
@@ -280,9 +267,9 @@ asked once per node, and worth asking because every later file matches the first
 
 **A new top-level node:**
 
-1. Run `new-node.sh spaces/<name>` or copy the whole template directory — bundled here at
-   `assets/template/`, and in a self-contained brain at `skill/assets/template/` — to the
-   new path. This creates `notes/`, `log/`, and `_tmp/` by default.
+1. Run `new-node.sh spaces/<name>` or copy the whole template directory bundled here at
+   `assets/template/` to the new path. This creates `notes/`, `log/`, and `_tmp/` by
+   default.
 2. With owner approval, fill every `<placeholder>` in its durable `README.md`.
 3. State in Conventions **what this node's own slots hold** once it has children. This is
    the sentence every future agent reads to decide where things go.
@@ -305,7 +292,7 @@ asked once per node, and worth asking because every later file matches the first
    moment you create one.
 7. Run the validator (see **Bundled tooling**).
 
-**A node for the brain itself.** Nothing creates one and `new-brain.sh` does not. Create
+**A node for the brain itself.** Brain scaffolding does not create one. Create
 it — `spaces/itakua/`, or whatever the owner calls the system — the first time the brain
 produces evidence about *itself*: a recurring override, a decision about the framework, a
 test of the structure. It earns a node by the usual test, its own dated stream, and until
@@ -389,76 +376,18 @@ context, that is the moment to build one — not before.
   warning you always ignore trains you to skip the orphan check sitting next to it, and
   that one is about data with no backup anywhere.
 
-## Creating a new brain
-
-A brain is an **instance** of this framework: its own folder, its own git repository, its
-own bindings. That is a different job from creating a node, and it has its own script.
-
-**First, and this is the step that gets skipped: install this skill on the account that
-will operate the new brain.** A skill installs per agent **account**, not per machine. Two
-brains on one computer run by two accounts need two installs, and the second account
-starts with nothing. Nothing on disk does this for you. A brain stood up without it gets a
-hand-built structure that looks right and carries none of the bindings below.
-
-```sh
-new-brain.sh <path> "<Name>" [--identity "Name <email>"] [--local-only] [--with-skill] [--into-existing]
-```
-
-| Flag | Does | When |
-|---|---|---|
-| `--identity` | Binds git identity **`--local`** to this repo | **Always**, on any machine with more than one brain. Validated — a malformed value is refused rather than silently committed |
-| `--local-only` | Declares the brain never-published and records the boundary in its README | When the material must not reach a hosted remote. The *absence of a remote* is the actual control; this documents why, for whoever reads it later |
-| `--with-skill` | Copies `itakua-map` into `skill/` | Keep for exceptional self-bootstrapping clones where marketplace installation is unavailable. It is not redundant, but it costs a second copy that can drift and leaves drift detection off until you install it and run `--stamp` |
-| `--into-existing` | Scaffolds around what is already in the folder, **overwriting nothing** | When the destination is not empty. Without it the script refuses, which is the safe default |
-
-It creates `00-inbox/`, `spaces/`, `drive-map`, `.gitignore`, pointer files `CLAUDE.md`
-and `AGENTS.md`, and a `README.md` carrying the **bindings table**: path, git remote, git
-identity, cloud storage, agent account. Fill in the two it cannot know, and **mark which
-bindings are constraints and which are preferences** — they look identical in a table,
-and a constraint you can relax by accident is not one.
-
-`check-structure.py` reads that table back off the README and compares it to the
-repository, so the table is not decoration: it is what makes a wrong remote or a wrong
-commit identity detectable. Then create the first node, above.
-
 ## Bundled tooling
 
 | Script | Does |
 |---|---|
-| `new-brain.sh` | Stands up a **new brain**: spine, `.gitignore`, bindings table, git repo with no remote. See **Creating a new brain** |
 | `new-node.sh` | Safely scaffolds a node with `notes/`, `log/`, `_tmp/`, and the README template, without overwriting existing files |
 | `check-structure.py` | Validates every node and its local artifact attachment, **and** checks the repository's git state — remote, identity — against the bindings declared in the root README. Run after any restructure, and after anything that touches git |
 | `index-artifacts.py` | Regenerates a node's `docs/index.md` from its cloud folder, in the node's own language. Flags orphans and cloud-pointer files that cannot be read on disk |
-| `link-drive.sh` | Recreates each mapped node's `docs/drive` symlink from portable and local mappings. **Run from a terminal**, once per machine |
 
-**One set of files, wherever this skill happens to live.** Three possibilities, same files:
-
-| Installed from | Scripts are at |
-|---|---|
-| A plugin | `${CLAUDE_PLUGIN_ROOT}/skills/itakua-map/scripts/` |
-| A `.skill` file | `<installed-skill>/scripts/` |
-| A brain repo that carries one | `skill/scripts/` |
-
-The third exists because that repo's `skill/` directory *is* this skill, packaged from
-there. If you cannot tell which applies, `find` the script by name rather than guessing.
-
-**Always run them from the repository root**, whichever copy you invoke: they operate on
-the current directory, not on where the script lives.
-
-```sh
-python3 skill/scripts/check-structure.py              # a repo that carries skill/
-python3 <wherever-this-skill-is>/scripts/check-structure.py   # otherwise
-python3 skill/scripts/index-artifacts.py spaces/<node>
-```
-
-**`skill/scripts/…` everywhere in this document is shorthand for whichever of those
-applies.** If neither is reachable — in a session scoped to a single node, for instance —
-say so rather than reimplementing them.
-
-**The installed copy is per account.** `skill/.packaged` records a hash of every skill
-file at packaging time and `check-structure.py` reports drift against it. That is one
-stamp against however many accounts installed the skill: it cannot tell you account B is
-stale. Re-package and re-install in **every** account, then run `--stamp`.
+These scripts live under this skill's `scripts/` directory. Resolve that directory for the
+current command, run the scripts from the brain root, and never persist an installed-skill
+or plugin-cache path in the brain. Creation and per-machine attachment scripts belong to
+`itakua-setup`; do not duplicate them here.
 
 ## When the user overrides a rule
 

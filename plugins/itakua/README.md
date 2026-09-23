@@ -1,20 +1,26 @@
 # Itakua
 
 Itakua is an operating framework for personal knowledge bases built from nested nodes,
-four predictable slots, and a small set of validation and setup tools. Its foundational
-skill is `itakua-map`.
+four predictable slots, and a small set of validation and setup tools. The plugin ships
+two skills with distinct triggers:
+
+- `itakua-map` defines normal operation: where material belongs, when work earns a node,
+  approval boundaries, node creation, validation, and artifact indexing.
+- `itakua-setup` creates brains and repairs machine-local setup after a clone or move,
+  including Git identity, declared `_tmp/` folders, and `docs/drive` attachments.
 
 ## What it gives you
 
-- `new-brain.sh` creates a new brain with a `spaces/` content container, bindings table,
-  Claude and Codex pointers, protective ignore rules, and a Git repository with no remote.
-- `new-node.sh` creates `notes/`, `log/`, and `_tmp/` for a new node and installs the node
-  README template without overwriting existing files.
-- `check-structure.py` validates nodes, local artifact reachability, and the brain's
-  declared Git bindings.
-- `index-artifacts.py` generates an approved index of cloud-stored artifacts.
-- `link-drive.sh` combines committed `drive-map` knowledge with machine-local cloud paths
-  to recreate each mapped node's `docs/drive` symlink.
+- `itakua-setup/scripts/new-brain.sh` creates a brain with a `spaces/` content container,
+  bindings table, Claude and Codex pointers, protective ignore rules, and a Git repository
+  with no remote.
+- `itakua-map/scripts/new-node.sh` creates `notes/`, `log/`, and `_tmp/` for a node and
+  installs its README template without overwriting existing files.
+- `itakua-map/scripts/check-structure.py` validates nodes, local artifact reachability,
+  and the brain's declared Git bindings.
+- `itakua-map/scripts/index-artifacts.py` generates an approved index of cloud artifacts.
+- `itakua-setup/scripts/link-drive.sh` combines committed `drive-map` knowledge with
+  machine-local cloud paths to recreate mapped `docs/drive` symlinks.
 
 The default safety contract is explicit: `_tmp/` is manual staging with no unattended
 processing; nothing there is deleted without owner approval. Agents need approval before
@@ -37,24 +43,21 @@ codex plugin marketplace add el-sapo/itakua
 codex plugin add itakua@itakua
 ```
 
-Start a new Codex task after installation. Both hosts load
-`plugins/itakua/skills/itakua-map/`.
+Start a new Codex task after installation. Both hosts discover `itakua-map` and
+`itakua-setup` from `plugins/itakua/skills/`.
 
 ## Start a brain
 
 ```sh
-<plugin>/skills/itakua-map/scripts/new-brain.sh ~/Documents/mybrain "My Brain" \
+<plugin>/skills/itakua-setup/scripts/new-brain.sh ~/Documents/mybrain "My Brain" \
   --identity "Your Name <you@example.com>"
 ```
 
-Use `--local-only` when a brain must never have a hosted remote.
+Use `--local-only` when a brain must never have a hosted remote. The supported bootstrap
+path is installing the plugin; generated brains do not carry a second framework copy.
 
-### Should you use `--with-skill`?
-
-Usually, no: marketplace installation gives each agent account one maintained copy of
-`itakua-map`. Keep `--with-skill` for a brain that must bootstrap itself from its own clone
-when the marketplace is unavailable. The tradeoff is a second framework copy that can
-drift and must be installed and stamped separately. The option is useful, but exceptional.
+For a fresh clone, load `itakua-setup` and ask the agent to bring the checkout into working
+order. For normal filing and node work, load `itakua-map`.
 
 ## What it is not
 

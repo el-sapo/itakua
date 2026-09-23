@@ -1,0 +1,4 @@
+interface:
+  display_name: "Itakua Setup"
+  short_description: "Set up or repair an Itakua brain"
+  default_prompt: "Use $itakua-setup to bring this Itakua brain into working order."

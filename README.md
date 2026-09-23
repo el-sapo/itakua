@@ -2,10 +2,11 @@
 
 Itakua is a portable, agent-friendly framework for a personal knowledge base. It keeps
 distilled knowledge in Markdown, raw evidence in append-only logs, large artifacts in
-cloud storage, and operating rules in the `itakua-map` skill.
+cloud storage, with normal operating rules in `itakua-map` and machine setup in
+`itakua-setup`.
 
 The project ships one plugin, [`itakua`](plugins/itakua), for both Claude and Codex.
-Both hosts load the same skill and scripts; only their discovery manifests differ.
+Both hosts load the same two skills; only their discovery manifests differ.
 
 ## The model
 
@@ -35,7 +36,7 @@ codex plugin marketplace add el-sapo/itakua
 codex plugin add itakua@itakua
 ```
 
-Start a new Codex task afterwards so it discovers `itakua-map`.
+Start a new Codex task afterwards so it discovers `itakua-map` and `itakua-setup`.
 
 ## Validate a checkout
 

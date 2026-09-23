@@ -5,9 +5,8 @@
     python3 <this script> spaces/guitar /path/to/drive/root
     python3 <this script> spaces/guitar --lang en
 
-Run it from the brain's root. Where this script lives depends on how the framework
-was installed -- plugin, installed skill, or a repo that carries one -- so the
-regeneration line written into each index records the path that actually worked.
+Run it from the brain's root. The regeneration line written into each index names the
+owning skill without persisting this machine's installed-skill or plugin-cache path.
 
 The index is the bridge across the git/cloud boundary. Running this command is an
 explicit request to create or replace the durable `docs/index.md`; do not run it in an
@@ -33,7 +32,8 @@ EN_HINTS = (" the ", " and ", " of the ", " with ", " this ", " for ", " from ",
 STRINGS = {
     "es": {
         "title":      "# Índice de artefactos — `{node}/docs/drive`",
-        "generated":  "**Generado — no editar a mano.** Regenerar con:",
+        "generated":  "**Generado — no editar a mano.** Para actualizarlo, cargar "
+                      "`itakua-map` y regenerar el índice de artefactos de `{node}`.",
         "summary":    "{count} archivos · {size} de contenido real · actualizado {date}",
         "root_key":   "(raíz)",
         "root_head":  "## Raíz",
@@ -58,7 +58,8 @@ STRINGS = {
     },
     "en": {
         "title":      "# Artifact index — `{node}/docs/drive`",
-        "generated":  "**Generated — do not hand-edit.** Regenerate with:",
+        "generated":  "**Generated — do not hand-edit.** To refresh it, load "
+                      "`itakua-map` and regenerate the artifact index for `{node}`.",
         "summary":    "{count} files · {size} of real content · updated {date}",
         "root_key":   "(root)",
         "root_head":  "## Root",
@@ -168,8 +169,7 @@ def main():
         f"date: {today}",
         "tags: [index, generated]", "---", "",
         S["title"].format(node=node), "",
-        S["generated"], "",
-        "```sh", f"python3 {sys.argv[0]} {node}", "```", "",
+        S["generated"].format(node=node), "",
         S["summary"].format(count=count, size=human(total), date=today), "",
     ]
     for folder in sorted(groups):
