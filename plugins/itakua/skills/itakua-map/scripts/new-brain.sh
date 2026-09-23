@@ -150,6 +150,15 @@ skill/scripts/*.local
 *.skill
 EOF
 
+write_file "$DEST/drive-map" <<'EOF'
+# Portable artifact mappings, committed with the brain.
+# Format: <node path>|<path relative to the cloud artifact root>
+# Node paths are relative to spaces/.
+#
+# guitar|Guitarra
+# automatizaciones/contador|AUTOMATIZACIONES/ALFO
+EOF
+
 write_file "$DEST/CLAUDE.md" <<EOF
 # $NAME
 
@@ -187,6 +196,7 @@ storage surfaced through symlinks, and the rules for operating it in the
 $(basename "$DEST")/
 ├── README.md      ← you are here. How to stand this up from a clone${WITH_SKILL:+
 ├── skill/         ← the framework, installable. SKILL.md + template + scripts}
+├── drive-map      ← portable node-to-artifact-folder mappings
 ├── 00-inbox/      ← capture anything, sort later
 └── spaces/         ← all content. Each folder is a node with its own README
 \`\`\`
@@ -268,8 +278,10 @@ for an agent — then create the symlinks once per machine:
 skill/scripts/link-drive.sh "<your cloud root>"
 ```
 
-Per-node targets, including a different cloud account, go in `.drive-map.local`
-at the root of this repository (gitignored — it holds real paths).
+Portable node-to-folder mappings live in committed `drive-map`, relative to the cloud
+root. Use `.drive-map.local` only for a machine-specific absolute override, such as a
+different account or sharing scope. For a new greenfield layout that deliberately mirrors
+node paths, opt into convention mode with `--convention`.
 
 ## Creating the first node
 
@@ -305,8 +317,10 @@ for an agent — then create the symlinks once per machine:
 @SKILL@/scripts/link-drive.sh "<your cloud root>"
 ```
 
-Per-node targets, including a different cloud account, go in `.drive-map.local`
-at the root of this repository (gitignored — it holds real paths).
+Portable node-to-folder mappings live in committed `drive-map`, relative to the cloud
+root. Use `.drive-map.local` only for a machine-specific absolute override, such as a
+different account or sharing scope. For a new greenfield layout that deliberately mirrors
+node paths, opt into convention mode with `--convention`.
 
 ## Creating the first node
 

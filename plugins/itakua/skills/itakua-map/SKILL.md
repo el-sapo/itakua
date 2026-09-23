@@ -52,9 +52,9 @@ Anything else is temporary.** That one rule is what stops this sprawling:
   and silent. Do not give a subfolder a README to "explain" it.
 - **Files in neither git nor cloud are a category, not a bug** — that is `_tmp/` doing
   its job.
-- **Portable core, machine-local edges.** `notes/`, `log/` and the READMEs travel with the
-  clone. `docs/`'s symlink and `_tmp/` staging are per-machine. A machine missing them
-  degrades gracefully; no knowledge is lost.
+- **Portable core, machine-local edges.** `notes/`, `log/`, the READMEs and `drive-map`
+  travel with the clone. `docs/drive` symlinks and `_tmp/` staging are per-machine. The
+  validator makes a missing artifact attachment visible; the cloud data itself is not lost.
 
 `notes/` and `log/` are required. New nodes also create `_tmp/` with the safe manual
 contract below; existing or deliberately minimal nodes may omit it. `docs/` is optional.
@@ -226,12 +226,30 @@ there is short and fixed:
 | `00-inbox/` | Optional capture — anything not yet filed |
 | `README.md` | What this brain is, its **bindings table**, and how to stand it up from a clone |
 | `CLAUDE.md` / `AGENTS.md` | Three-line pointers to `README.md`. Pointers, never copies |
+| `drive-map` | Optional committed mapping from node paths to artifact paths relative to the cloud root |
+| `.drive-map.local` | Optional gitignored absolute overrides for this machine only |
 | `skill/` | Only in a brain created with `--with-skill` |
 | `.gitignore` | |
 
 Anything else at the root is drift. `check-structure.py` only walks `spaces/`, so nothing
 catches it for you. **A dated event or a piece of knowledge never belongs at the root** —
 it belongs in a node, which is what the two filing questions are for.
+
+### Drive mappings
+
+`drive-map` preserves the part that belongs to the brain: which cloud folder corresponds
+to which node. Each non-comment line is `<node path>|<path relative to the artifact root>`;
+node paths are relative to `spaces/`. `.drive-map.local` uses the same node key with an
+absolute target and wins when present, for genuine machine-specific exceptions.
+
+An indexed node missing from both maps is an actionable setup gap, not permission to
+guess. Convention mode is an explicit greenfield choice for creating `<root>/<node path>`;
+it is never the silent fallback for an existing indexed artifact layer.
+
+To migrate an existing `.drive-map.local`, turn each target beneath the common artifact
+root into a relative `drive-map` entry, then review and commit that portable file. Keep a
+target outside the common root in `.drive-map.local`; a new machine will surface that node
+as unmapped until its own override is supplied.
 
 ### `00-inbox/`
 
@@ -393,11 +411,11 @@ new-brain.sh <path> "<Name>" [--identity "Name <email>"] [--local-only] [--with-
 | `--with-skill` | Copies `itakua-map` into `skill/` | Keep for exceptional self-bootstrapping clones where marketplace installation is unavailable. It is not redundant, but it costs a second copy that can drift and leaves drift detection off until you install it and run `--stamp` |
 | `--into-existing` | Scaffolds around what is already in the folder, **overwriting nothing** | When the destination is not empty. Without it the script refuses, which is the safe default |
 
-It creates `00-inbox/`, `spaces/`, `.gitignore`, pointer files `CLAUDE.md` and `AGENTS.md`, and a `README.md`
-carrying the **bindings table**: path, git remote, git identity, cloud storage, agent
-account. Fill in the two it cannot know, and **mark which bindings are constraints and
-which are preferences** — they look identical in a table, and a constraint you can relax
-by accident is not one.
+It creates `00-inbox/`, `spaces/`, `drive-map`, `.gitignore`, pointer files `CLAUDE.md`
+and `AGENTS.md`, and a `README.md` carrying the **bindings table**: path, git remote, git
+identity, cloud storage, agent account. Fill in the two it cannot know, and **mark which
+bindings are constraints and which are preferences** — they look identical in a table,
+and a constraint you can relax by accident is not one.
 
 `check-structure.py` reads that table back off the README and compares it to the
 repository, so the table is not decoration: it is what makes a wrong remote or a wrong
@@ -409,9 +427,9 @@ commit identity detectable. Then create the first node, above.
 |---|---|
 | `new-brain.sh` | Stands up a **new brain**: spine, `.gitignore`, bindings table, git repo with no remote. See **Creating a new brain** |
 | `new-node.sh` | Safely scaffolds a node with `notes/`, `log/`, `_tmp/`, and the README template, without overwriting existing files |
-| `check-structure.py` | Validates every node, **and** checks the repository's git state — remote, identity — against the bindings declared in the root README. Run after any restructure, and after anything that touches git |
+| `check-structure.py` | Validates every node and its local artifact attachment, **and** checks the repository's git state — remote, identity — against the bindings declared in the root README. Run after any restructure, and after anything that touches git |
 | `index-artifacts.py` | Regenerates a node's `docs/index.md` from its cloud folder, in the node's own language. Flags orphans and cloud-pointer files that cannot be read on disk |
-| `link-drive.sh` | Creates each node's `docs/drive` symlink. **Run from a terminal**, once per machine |
+| `link-drive.sh` | Recreates each mapped node's `docs/drive` symlink from portable and local mappings. **Run from a terminal**, once per machine |
 
 **One set of files, wherever this skill happens to live.** Three possibilities, same files:
 

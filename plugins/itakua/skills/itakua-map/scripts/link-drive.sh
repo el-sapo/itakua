@@ -1,39 +1,53 @@
 #!/usr/bin/env bash
-# Link every node's docs/ folder to its Google Drive counterpart.
+# Attach each node's docs/drive symlink to its cloud artifact folder.
 #
 # RUN FROM THE ROOT OF THE BRAIN REPO, from a real terminal on the Mac:
 #
-#   ./skill/scripts/link-drive.sh "/path/to/your/cloud-storage/itakua-docs"
+#   ./skill/scripts/link-drive.sh "/absolute/path/to/cloud-root"
 #
-# It operates on the CURRENT DIRECTORY, not on where this file lives, so the copy
-# bundled with the installed skill and the copy in skill/scripts/ behave identically.
-# If there is no spaces/ here, it stops — a setup script must never report success
-# while doing nothing.
+# Portable mappings live in committed `drive-map` at the brain root:
+#
+#   guitar|Guitarra
+#   projects/demo|CLIENTS/Demo
+#
+# The right side is relative to the machine-local root supplied on the command line.
+# Genuine machine exceptions live in gitignored `.drive-map.local` as absolute targets:
+#
+#   projects/demo|/absolute/path/on/this/machine/Demo
+#
+# Local overrides win over portable mappings. An indexed node missing from both maps is
+# reported as unmapped so an agent or owner can resolve the gap; the script does not guess.
+# For a deliberately greenfield layout, opt into <ROOT>/<node path> creation explicitly:
+#
+#   ./skill/scripts/link-drive.sh --convention "/absolute/path/to/cloud-root"
 #
 # Agents working through a hosted bridge may not see local absolute paths. In that case,
 # run this script yourself from the machine that owns the cloud mirror.
 #
-# Run ONCE PER MACHINE. The symlinks are gitignored and machine-specific (Drive paths
-# contain your account address), so they never travel with the repo.
-#
-# TWO WAYS TO POINT A NODE AT DRIVE
-#
-#  1. Convention (default). Pass a root; each node maps to <ROOT>/<node path>:
-#       spaces/guitar/docs/drive                -> <ROOT>/guitar
-#       spaces/projects/demo/docs/drive         -> <ROOT>/projects/demo
-#
-#  2. Override. Any node listed in .drive-map.local — at the ROOT OF THE BRAIN, beside
-#     spaces/ — goes wherever you say:
-#     a pre-existing cloud folder, a different sharing scope, or a different account.
-#     Each account may mount at a different machine-local path.
-#     That file is gitignored because the paths are machine-specific.
-#
-#     Format — "<node path>|<absolute target>", # for comments. The node path is
-#     relative to spaces/:
-#       guitar|/path/to/cloud-storage/Guitar
-#       projects/demo|/path/to/cloud-storage/Demo
+# Bash 3.2 compatible on purpose: macOS still ships /bin/bash 3.2.
 
 set -euo pipefail
+
+usage() {
+  echo "usage: link-drive.sh [--convention] [absolute-drive-root]" >&2
+}
+
+CONVENTION=""
+DRIVE_ROOT=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --convention) CONVENTION=1 ;;
+    -h|--help) usage; exit 0 ;;
+    --*) echo "error: unknown option $1" >&2; usage; exit 1 ;;
+    *)
+      if [ -n "$DRIVE_ROOT" ]; then
+        echo "error: more than one Drive root supplied" >&2; usage; exit 1
+      fi
+      DRIVE_ROOT="$1"
+      ;;
+  esac
+  shift
+done
 
 if [ ! -d spaces ]; then
   echo "error: no spaces/ in $(pwd)" >&2
@@ -41,82 +55,151 @@ if [ ! -d spaces ]; then
   exit 1
 fi
 
-DRIVE_ROOT="${1:-}"
-MAP=".drive-map.local"
-# Older brains kept this inside the framework directory, which coupled the tooling to a
-# layout that changes. If the old copy is the only one, use it and say so — a silent
-# fallback is how this same line broke twice before.
-if [ ! -f "$MAP" ] && [ -f "skill/scripts/drive-map.local" ]; then
-  MAP="skill/scripts/drive-map.local"
-  echo "  note: using the legacy map at $MAP" >&2
-  echo "        move it to .drive-map.local at the brain root; the framework may not live here for long" >&2
+if [ -n "$DRIVE_ROOT" ]; then
+  case "$DRIVE_ROOT" in
+    /*) ;;
+    *) echo "error: Drive root must be an absolute path: $DRIVE_ROOT" >&2; exit 1 ;;
+  esac
+  if [ ! -d "$DRIVE_ROOT" ]; then
+    echo "error: Drive root does not exist or is unavailable: $DRIVE_ROOT" >&2
+    echo "       Sign in or mount it first; this script will not create the root." >&2
+    exit 1
+  fi
+  DRIVE_ROOT="$(cd "$DRIVE_ROOT" && pwd -P)"
+elif [ -n "$CONVENTION" ]; then
+  echo "error: --convention requires an absolute Drive root" >&2
+  exit 1
 fi
 
-lookup() {  # node -> overridden target, or empty
-  [ -f "$MAP" ] || return 0
-  awk -F'|' -v n="$1" '!/^[[:space:]]*#/ && $1==n {print $2; exit}' "$MAP"
+PORTABLE_MAP="drive-map"
+LOCAL_MAP=".drive-map.local"
+# Older brains kept the local map inside the framework directory. Preserve that fallback
+# long enough for an agent to migrate it, but say exactly which file is active.
+if [ ! -f "$LOCAL_MAP" ] && [ -f "skill/scripts/drive-map.local" ]; then
+  LOCAL_MAP="skill/scripts/drive-map.local"
+  echo "  note: using the legacy local map at $LOCAL_MAP" >&2
+  echo "        move it to .drive-map.local at the brain root" >&2
+fi
+
+lookup() {  # map file, node -> mapped value, or empty
+  [ -f "$1" ] || return 0
+  awk -F'|' -v n="$2" '
+    !/^[[:space:]]*#/ && NF >= 2 && $1 == n { sub(/\r$/, "", $2); print $2; exit }
+  ' "$1"
 }
 
-# NOTE: bash 3.2 compatible on purpose. macOS ships bash 3.2.57 as /bin/bash, and
-# `#!/usr/bin/env bash` resolves to it unless Homebrew bash is installed AND ahead on
-# PATH. `mapfile` is bash 4.0+, so under `set -euo pipefail` it killed this script on
-# its first real statement, on the one platform this script exists for. Do not
-# reintroduce it, `declare -A`, or `${var^^}`.
-#
-# The explicit counter is also deliberate: in bash 3.2, `${#arr[@]}` on an EMPTY array
-# trips `set -u`, so the "nothing to link" branch below could never be reached.
+portable_path_ok() {
+  [ -n "$1" ] || return 1
+  case "$1" in /*) return 1 ;; esac
+  case "/$1/" in *"/../"*|*"/./"*|*"//"*) return 1 ;; esac
+  return 0
+}
+
+# Match check-structure.py's boundary: once traversal enters a node slot, everything below
+# it remains filing, even if a subfolder happens to contain its own README.md.
+is_node_dir() {
+  local candidate="$1" rest part current state
+  case "$candidate" in spaces/*) ;; *) return 1 ;; esac
+  rest="${candidate#spaces/}"
+  current="spaces"
+  state="container"
+  while [ -n "$rest" ]; do
+    case "$rest" in
+      */*) part="${rest%%/*}"; rest="${rest#*/}" ;;
+      *) part="$rest"; rest="" ;;
+    esac
+    if [ "$state" = "node" ]; then
+      case "$part" in notes|log|docs|_tmp) return 1 ;; esac
+    elif [ "$state" = "orphan" ]; then
+      return 1
+    fi
+    current="$current/$part"
+    if [ -f "$current/README.md" ]; then state="node"; else state="orphan"; fi
+  done
+  [ "$state" = "node" ]
+}
+
+# Find direct docs/ slots belonging to actual nodes.
 DOCSDIRS=(); NDOCS=0
 while IFS= read -r d; do
   [ -n "$d" ] || continue
+  node_dir="${d%/docs}"
+  is_node_dir "$node_dir" || continue
   DOCSDIRS[$NDOCS]="$d"
   NDOCS=$((NDOCS + 1))
 done < <(find spaces -type d -name docs | sed 's|^\./||' | sort)
 
 if [ "$NDOCS" -eq 0 ]; then
-  echo "error: no docs/ folders under spaces/ — nothing to link." >&2
-  echo "       A node gets one when it has artifacts. Create it first." >&2
+  echo "error: no node docs/ slots under spaces/ — nothing to link." >&2
   exit 1
 fi
 
 status=0
-# NOT a pipeline: a `while` on the right of a `|` runs in a subshell, so every
-# failure it recorded would be discarded and this script would exit 0 regardless.
 for docsdir in "${DOCSDIRS[@]}"; do
-    node="${docsdir#spaces/}"; node="${node%/docs}"
-    link="$docsdir/drive"
+  node="${docsdir#spaces/}"; node="${node%/docs}"
+  link="$docsdir/drive"
+  local_target="$(lookup "$LOCAL_MAP" "$node")"
+  portable_target="$(lookup "$PORTABLE_MAP" "$node")"
+  target=""; origin=""
 
-    target="$(lookup "$node")"
-    if [ -n "$target" ]; then
-      origin="override"
-    elif [ -n "$DRIVE_ROOT" ]; then
-      target="$DRIVE_ROOT/$node"; origin="convention"
-    else
-      echo "  unmapped $node — not in $MAP and no root given" >&2; status=1; continue
-    fi
-
+  if [ -n "$local_target" ]; then
+    case "$local_target" in
+      /*) ;;
+      *)
+        echo "  INVALID  $node — $LOCAL_MAP targets must be absolute: $local_target" >&2
+        status=1; continue
+        ;;
+    esac
+    target="$local_target"; origin="local override"
     if [ ! -d "$target" ]; then
-      if [ "$origin" = "override" ]; then
-        echo "  MISSING  $node -> $target (override target does not exist)" >&2; status=1; continue
-      fi
-      mkdir -p "$target"
+      echo "  MISSING  $node -> $target (local override is unavailable)" >&2
+      status=1; continue
     fi
+  elif [ -n "$portable_target" ]; then
+    if ! portable_path_ok "$portable_target"; then
+      echo "  INVALID  $node — drive-map target must be a safe relative path: $portable_target" >&2
+      status=1; continue
+    fi
+    if [ -z "$DRIVE_ROOT" ]; then
+      echo "  unmapped $node — drive-map needs an absolute Drive root on this machine" >&2
+      status=1; continue
+    fi
+    target="$DRIVE_ROOT/$portable_target"; origin="portable"
+    if [ ! -d "$target" ]; then
+      echo "  MISSING  $node -> $target (portable mapped folder is unavailable)" >&2
+      status=1; continue
+    fi
+  elif [ -n "$CONVENTION" ]; then
+    target="$DRIVE_ROOT/$node"; origin="explicit convention"
+    [ -d "$target" ] || mkdir -p "$target"
+  elif [ -f "$docsdir/index.md" ]; then
+    echo "  unmapped $node — index.md exists but neither drive-map nor $LOCAL_MAP has an entry" >&2
+    echo "           inspect the node and cloud folder, then add a portable or local mapping" >&2
+    status=1; continue
+  else
+    echo "  skip     $node — docs/ is unused and has no mapping"
+    continue
+  fi
 
-    if [ -L "$link" ]; then
-      if [ "$(readlink "$link")" = "$target" ]; then echo "  ok       $link  [$origin]"
-      else
-        echo "  SKIP     $link points to $(readlink "$link"), expected $target" >&2
-        echo "           remove or relink it only with owner approval" >&2
-        status=1
-      fi
-    elif [ -e "$link" ]; then
-      echo "  SKIP     $link exists and is not a symlink" >&2; status=1
+  if [ -L "$link" ]; then
+    if [ "$(readlink "$link")" = "$target" ]; then
+      echo "  ok       $link  [$origin]"
     else
-      ln -s "$target" "$link"; echo "  linked   $link -> $target  [$origin]"
+      echo "  SKIP     $link points to $(readlink "$link"), expected $target" >&2
+      echo "           remove or relink it only with owner approval" >&2
+      status=1
     fi
+  elif [ -e "$link" ]; then
+    echo "  SKIP     $link exists and is not a symlink" >&2
+    status=1
+  else
+    ln -s "$target" "$link"
+    echo "  linked   $link -> $target  [$origin]"
+  fi
 done
 
 echo
-echo "$NDOCS docs/ folder(s) processed."
+echo "$NDOCS node docs/ slot(s) inspected."
 echo "Mark each linked folder 'Available offline' in Drive for Desktop —"
 echo "streamed placeholders are unreliable for agents."
 exit $status

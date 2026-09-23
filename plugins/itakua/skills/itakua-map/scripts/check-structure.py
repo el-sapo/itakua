@@ -80,6 +80,54 @@ def check_nodes(found):
                     problems.append(f"{n}/README.md `_tmp/` contract is missing {field}")
 
 
+# --- artifact layer ---------------------------------------------------------------
+
+def indexed_artifact_count(index):
+    """Return an index's artifact count, or None when it cannot be read reliably."""
+    try:
+        text = index.read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        return None
+    # Generated indexes carry the count in their English or Spanish summary line.
+    match = re.search(r"(?m)^(\d+)\s+(?:files?|archivos?)\s+·", text)
+    return int(match.group(1)) if match else None
+
+
+def index_claim(index):
+    """Describe what an index claims without making its prose a rigid schema."""
+    count = indexed_artifact_count(index)
+    return (f"{index} has no readable artifact count" if count is None
+            else f"{index} records {count} artifact(s)")
+
+
+def check_artifacts(found):
+    """Check each node's direct docs/drive edge without assuming docs is in use."""
+    for n in found:
+        docs = n / "docs"
+        index = docs / "index.md"
+        drive = docs / "drive"
+        has_index = os.path.lexists(str(index))
+
+        if drive.is_symlink():
+            if not drive.exists():
+                detail = f"; {index_claim(index)}" if has_index else ""
+                problems.append(f"{drive} is a dangling or unavailable symlink{detail}")
+            elif not drive.is_dir():
+                problems.append(f"{drive} is a symlink but does not point to a directory")
+        elif os.path.lexists(str(drive)):
+            problems.append(f"{drive} exists but is not a symlink")
+        elif has_index:
+            count = indexed_artifact_count(index)
+            if count is None:
+                problems.append(f"{drive} is absent and {index} has no readable artifact count")
+            elif count > 0:
+                problems.append(f"{drive} is absent but {index} records {count} artifact(s)")
+            else:
+                notes.append(f"{index} records 0 artifacts; {drive} is absent")
+        elif docs.is_dir():
+            notes.append(f"{n}/ has an unused docs/ slot (no index or drive link)")
+
+
 # --- git state -------------------------------------------------------------------
 
 def git(*args):
@@ -255,6 +303,7 @@ def main():
 
     found = scan(root)
     check_nodes(found)
+    check_artifacts(found)
     check_drift(pathlib.Path("skill"))
     if "--no-git" not in args:
         check_git()

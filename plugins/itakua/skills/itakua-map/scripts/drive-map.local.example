@@ -1,12 +1,13 @@
-# Per-node Drive targets. Copy to .drive-map.local at the ROOT of your brain
-# (beside spaces/), gitignored, and edit.
+# Machine-specific Drive overrides. Copy to .drive-map.local at the ROOT of your brain
+# (beside spaces/), keep it gitignored, and edit only the exceptional nodes.
 # Format: <node path>|<absolute target on THIS machine>
 #
 # The node path is relative to spaces/ — 'guitar', not 'spaces/guitar'. That is also how
 # the convention root maps, so Drive never mirrors the repo's own container folder.
 #
-# Nodes listed here ignore the convention root entirely — point them at a pre-existing
-# folder, a separately-shared folder, or a different Google account.
+# Portable mappings belong in committed `drive-map` as paths relative to the common cloud
+# root. Nodes listed here override that file entirely — use this for a pre-existing folder,
+# a separately-shared folder, or a different Google account on this machine.
 #
 # guitar|/path/to/cloud-storage/Guitar
 # projects/demo|/path/to/cloud-storage/Demo

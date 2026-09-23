@@ -1,0 +1,9 @@
+# Portable artifact mappings. Copy to `drive-map` at the ROOT of the brain and commit it.
+# Format: <node path>|<path relative to the cloud artifact root>
+#
+# Node paths are relative to spaces/. Targets are resolved beneath the absolute root passed
+# to link-drive.sh. Existing artifact folders must already exist; only explicit
+# `--convention` mode creates folders.
+#
+# guitar|Guitarra
+# automatizaciones/contador|AUTOMATIZACIONES/ALFO

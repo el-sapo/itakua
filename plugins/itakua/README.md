@@ -10,9 +10,11 @@ skill is `itakua-map`.
   Claude and Codex pointers, protective ignore rules, and a Git repository with no remote.
 - `new-node.sh` creates `notes/`, `log/`, and `_tmp/` for a new node and installs the node
   README template without overwriting existing files.
-- `check-structure.py` validates nodes and checks the brain's declared Git bindings.
+- `check-structure.py` validates nodes, local artifact reachability, and the brain's
+  declared Git bindings.
 - `index-artifacts.py` generates an approved index of cloud-stored artifacts.
-- `link-drive.sh` links each node's `docs/drive` folder to cloud storage per machine.
+- `link-drive.sh` combines committed `drive-map` knowledge with machine-local cloud paths
+  to recreate each mapped node's `docs/drive` symlink.
 
 The default safety contract is explicit: `_tmp/` is manual staging with no unattended
 processing; nothing there is deleted without owner approval. Agents need approval before
