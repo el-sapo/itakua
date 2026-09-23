@@ -1,6 +1,6 @@
 ---
 name: itakua-setup
-description: Create, bootstrap, repair, or migrate the machine-local setup of an Itakua brain. Use when creating a brain; bringing a fresh clone or moved checkout into working order; fixing missing, dangling, or unavailable docs/drive attachments; resolving absent or mismatched repository-local Git identity; restoring a README-declared _tmp/ folder; or configuring portable and local artifact mappings.
+description: Create, bootstrap, repair, or migrate the machine-local setup of an Itakua brain. Use when creating or cloning a brain; bringing a fresh or moved checkout into working order; diagnosing Git authentication, sandbox permission, or repository configuration failures; fixing missing, dangling, or unavailable docs/drive attachments; resolving absent or mismatched repository-local Git identity; restoring a README-declared _tmp/ folder; or configuring portable and local artifact mappings.
 ---
 
 # Set up an Itakua brain
@@ -53,6 +53,31 @@ Run these checks from the brain root:
    `.drive-map.local`, make the cloud folders available offline, and run the linker.
 6. Run the map validator again. Report unresolved mappings or unavailable storage as
    explicit setup gaps; do not invent targets.
+
+## Diagnose clone and Git failures
+
+Keep host access separate from repository configuration. A hosted or sandboxed agent may
+see the filesystem without sharing the host's keychain, SSH keys, GitHub CLI session, or
+interactive credential prompt.
+
+| Signal | Category | Response |
+|---|---|---|
+| `Authentication failed`, `Permission denied (publickey)`, or an unavailable credential prompt | Host authentication | Stop retrying. Show the failed command and have the owner clone or log in from a local interactive terminal. Give an exact command only when the remote, provider, and authentication method are known; otherwise state what is missing instead of guessing. Never ask them to paste a token or key into chat. |
+| `Operation not permitted` or `Permission denied` while creating, renaming, or removing a path under `.git/` | Sandbox/filesystem permission | Report the exact path and failed operation. Agent-driven Git needs create, write, rename, and delete access within this repository's worktree and `.git/`; read/write access without delete is insufficient. |
+| `not a git repository`, a wrong remote, or an absent/mismatched local identity | Repository configuration | Inspect `git status`, `git remote -v`, and repository-local config. Repair only the declared repository bindings; do not treat configuration as an authentication failure. |
+
+For `.git/index.lock`, first check whether the file exists and whether a Git process is
+using it. Remove only that exact, confirmed stale lock when permitted; otherwise ask the
+owner to remove it in the host terminal. If no lock exists and creation itself is blocked,
+deletion cannot help: obtain create, write, rename, and delete access scoped to this
+worktree and `.git/`, or leave Git mutations to the owner. Never recursively change
+`.git/` permissions or delete other lock files speculatively. A checkout created by the
+owner does not give the agent remote credentials; later fetch or push operations may need
+the same host-side handoff.
+
+Keep these diagnostics out of `check-structure.py`. The structural validator may report
+repository state, but it cannot prove that a particular bridge has credentials, an
+interactive terminal, or sufficient sandbox permissions.
 
 ## Attach artifacts
 
