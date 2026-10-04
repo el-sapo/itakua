@@ -17,7 +17,7 @@ A brain declares bindings in its root README -- remote, identity -- and those ar
 things whose failure is silent and unrecoverable. Structure problems are a tidy-up;
 a work brain pushed to a personal account is not.
 """
-import os, sys, pathlib, re, subprocess, unicodedata
+import os, sys, json, pathlib, re, subprocess, unicodedata
 
 SLOTS = ("notes", "log", "docs", "_tmp")
 REQUIRED = ("notes", "log")
@@ -167,14 +167,32 @@ def frontmatter(text):
 
 
 def scalar(value):
-    """A plain YAML scalar: surrounding quotes removed, or a trailing comment dropped."""
+    """A YAML scalar as the block form writes it: quotes undone, trailing comment dropped.
+
+    None for a value YAML would read differently from how it looks -- an unquoted `: `
+    or trailing `:` -- so the caller reports it instead of agreeing with a wrong value.
+    """
     value = value.strip()
-    quoted = re.match(r"""^(["'])(.*)\1(?:\s+#.*)?$""", value)
-    if quoted:
-        return quoted.group(2)
+    if value.startswith("'"):
+        m = re.fullmatch(r"'((?:[^']|'')*)'(?:\s+#.*)?", value)
+        return m.group(1).replace("''", "'") if m else None
+    if value.startswith('"'):
+        m = re.fullmatch(r'"((?:[^"\\]|\\.)*)"(?:\s+#.*)?', value)
+        try:
+            return json.loads(f'"{m.group(1)}"') if m else None
+        except ValueError:
+            return None
     if value.startswith("#"):
         return ""
-    return re.split(r"\s+#", value, maxsplit=1)[0].strip()
+    value = re.split(r"\s+#", value, maxsplit=1)[0].strip()
+    return None if re.search(r":(\s|$)", value) else value
+
+
+def yaml_scalar(value):
+    """`value` written so that YAML and scalar() both read it back unchanged."""
+    if re.search(r""":(\s|$)|\s#|^\s|\s$|^[-?:,\[\]{}#&*!|>'"%@`]""", value):
+        return "'" + value.replace("'", "''") + "'"
+    return value
 
 
 def declared_artifacts(text):
@@ -190,13 +208,15 @@ def declared_artifacts(text):
         if not m:
             continue
         fields = {}
-        if scalar(m.group(1)):
+        if scalar(m.group(1)) != "":
             return fields                          # inline or flow form
         for sub in lines[i + 1:]:
             if not sub.strip() or sub.lstrip().startswith("#"):
                 continue
             if not sub[:1].isspace():
                 break
+            if sub.startswith("\t"):
+                return {}                          # YAML forbids tab indentation
             field = re.match(r"\s+([A-Za-z_]+):(.*)$", sub)
             if field:
                 fields[field.group(1)] = scalar(field.group(2))
@@ -257,18 +277,19 @@ def check_artifact_store(found):
         if declared is None:
             if drive.is_symlink():
                 proposal = (f"; from {source}, propose `provider: google-drive` and "
-                            f"`root: {root}`" if root else
+                            f"`root: {yaml_scalar(root)}`" if root else
                             "; set `root` to the Drive folder docs/drive points to, as "
                             "Drive shows it")
                 warns.append(f"{n}/ has docs/drive but {readme} declares no `artifacts:` "
                              f"key{proposal}. Adding it is a README edit: owner approval")
             continue
 
-        declared_root = nfc(declared.get("root", "")).strip("/")
-        provider = declared.get("provider", "")
+        declared_root = nfc(declared.get("root") or "").strip("/")
+        provider = declared.get("provider") or ""
         if not declared_root:
             warns.append(f"{readme} has an `artifacts:` key with no readable `root` -- "
-                         f"use the two-line block form the itakua-map skill defines")
+                         f"use the two-line block form the itakua-map skill defines, "
+                         f"indented with spaces, quoting a value with `: ` or ` #` in it")
         elif "<" in declared_root or ">" in declared_root:
             warns.append(f"{readme} `artifacts.root` is still a placeholder: {declared_root}")
             declared_root = ""
@@ -282,7 +303,8 @@ def check_artifact_store(found):
                          f"the node keeps no artifacts in Drive")
         elif root and declared_root and declared_root != root:
             warns.append(f"{readme} declares `artifacts.root: {declared_root}`, but {source} "
-                         f"gives `{root}` -- correct whichever is stale, with owner approval")
+                         f"gives `root: {yaml_scalar(root)}` -- correct whichever is stale, "
+                         f"with owner approval")
 
 
 # --- git state -------------------------------------------------------------------

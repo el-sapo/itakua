@@ -7,7 +7,9 @@ user sees: warnings, exit codes, and the generated index.
 """
 
 import json
+import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import tempfile
@@ -47,10 +49,14 @@ class DriveRootDeclarationTests(unittest.TestCase):
         return folder
 
     def run_validator(self, brain):
-        return subprocess.run(
+        result = subprocess.run(
             [sys.executable, str(VALIDATOR), "--no-git"],
             cwd=brain, capture_output=True, text=True, timeout=10,
         )
+        # A crash prints a traceback and no WARN lines; never let it read as "quiet".
+        self.assertEqual(result.stderr, "", result.stderr)
+        self.assertIn("nodes checked", result.stdout)
+        return result
 
     @staticmethod
     def warnings(result):
@@ -130,9 +136,34 @@ class DriveRootDeclarationTests(unittest.TestCase):
             target = self.drive_folder(temp, "My Drive", decomposed)
             (node / "docs" / "drive").symlink_to(target)
 
-            result = self.run_validator(brain)
+            quiet = self.run_validator(brain)
+            (node / "README.md").write_text(readme(), encoding="utf-8")
+            proposed = self.run_validator(brain)
 
-            self.assertEqual(self.warnings(result), [], result.stdout)
+            self.assertEqual(quiet.returncode, 0, quiet.stdout)
+            self.assertEqual(self.warnings(quiet), [], quiet.stdout)
+            self.assertIn(f"root: My Drive/{composed}", "\n".join(self.warnings(proposed)))
+
+    def test_proposed_root_round_trips_for_awkward_folder_names(self):
+        for folder in ("Setlist #2", "Clases: 2026", "Notas:", "Fer's Guitar"):
+            with self.subTest(folder=folder), tempfile.TemporaryDirectory() as temp:
+                brain, node = self.make_brain(temp)
+                (node / "docs" / "drive").symlink_to(
+                    self.drive_folder(temp, "My Drive", folder))
+
+                first = self.run_validator(brain)
+                line = re.search(r"`(root: [^`]+)`", "\n".join(self.warnings(first))).group(1)
+                frontmatter = f"artifacts:\n  provider: google-drive\n  {line}\n"
+                (node / "README.md").write_text(readme(frontmatter), encoding="utf-8")
+                second = self.run_validator(brain)
+
+                self.assertEqual(self.warnings(second), [], second.stdout)
+                try:
+                    import yaml
+                except ImportError:
+                    continue
+                self.assertEqual(yaml.safe_load(frontmatter)["artifacts"]["root"],
+                                 f"My Drive/{folder}")
 
     def test_stale_key_is_warned_with_the_mapped_root(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -163,6 +194,8 @@ class DriveRootDeclarationTests(unittest.TestCase):
             "artifacts: {provider: google-drive, root: My Drive/Project}\n": "no readable `root`",
             KEY.format(root="My Drive/<folder>"): "placeholder",
             "artifacts:\n  provider: gdrive\n  root: My Drive/Project\n": "gdrive",
+            "artifacts:\n  provider: google-drive\n  root: My Drive/A: B\n": "no readable `root`",
+            "artifacts:\n\tprovider: google-drive\n\troot: My Drive/Project\n": "no readable `root`",
         }
         for frontmatter, expected in cases.items():
             with self.subTest(frontmatter=frontmatter), tempfile.TemporaryDirectory() as temp:
@@ -216,12 +249,14 @@ class DriveRootDeclarationTests(unittest.TestCase):
             result = self.run_validator(brain)
 
             self.assertIn("  root: My Drive/Project   #", path.read_text(encoding="utf-8"))
+            self.assertEqual(result.returncode, 0, result.stdout)
             self.assertEqual(self.warnings(result), [], result.stdout)
 
 
 class IndexLinkColumnTests(unittest.TestCase):
     DOC_ID = "1AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_"
     SHEET_ID = "1ZyXwVuTsRqPoNmLkJiHgFeDcBa98765"
+    LEGACY_ID = "1LeGaCyBaCkUpAnDsYnC0123456789"
 
     def build(self, temp):
         node = Path(temp) / "brain" / "spaces" / "project"
@@ -240,6 +275,15 @@ class IndexLinkColumnTests(unittest.TestCase):
         pointer(drive / "songs" / "Song.gdoc", self.DOC_ID)
         pointer(drive / "Inventory.gsheet", self.SHEET_ID, key="0-AbC_123")
         (drive / "Deck.gslides").write_text("not json", encoding="utf-8")
+        (drive / "Legacy.gdoc").write_text(json.dumps(
+            {"resource_id": f"document:{self.LEGACY_ID}", "email": "owner@example.com"}),
+            encoding="utf-8")
+        pointer(drive / "Odd.gsheet", "../x y")
+        pointer(drive / "BadKey.gslides", self.SHEET_ID, key="0&x=<script>")
+        (drive / "Array.gdoc").write_text("[]", encoding="utf-8")
+        (drive / "Deep.gdoc").write_text("[" * 5000, encoding="utf-8")
+        if hasattr(os, "mkfifo"):
+            os.mkfifo(drive / "Pipe.gdoc")
         (drive / "songs" / "Tab.docx").write_bytes(b"PK\x03\x04 binary")
         (node / "docs" / "pointers-ok.md").write_text(
             "- `songs/Song.gdoc`\n", encoding="utf-8")
@@ -274,13 +318,20 @@ class IndexLinkColumnTests(unittest.TestCase):
             self.assertEqual(
                 sheet[-1],
                 f"<https://drive.google.com/open?id={self.SHEET_ID}&resourcekey=0-AbC_123>")
-            self.assertEqual(self.row(index, "Deck.gslides")[-1], "")
+            self.assertEqual(self.row(index, "Legacy.gdoc")[-1],
+                             f"<https://drive.google.com/open?id={self.LEGACY_ID}>")
+            self.assertEqual(self.row(index, "BadKey.gslides")[-1],
+                             f"<https://drive.google.com/open?id={self.SHEET_ID}>")
+            for unreadable in ("Deck.gslides", "Odd.gsheet", "Array.gdoc", "Deep.gdoc"):
+                self.assertEqual(self.row(index, unreadable)[-1], "", unreadable)
+            if hasattr(os, "mkfifo"):
+                self.assertEqual(self.row(index, "Pipe.gdoc")[-1], "")
             tab = self.row(index, "Tab.docx")
             self.assertEqual(len(tab), 4)
             self.assertEqual(tab[-1], "")
             self.assertNotIn("owner@example.com", index)
-            self.assertIn("2 Drive link(s)", result.stdout)
-            self.assertIn("1 pointer(s) had no readable Drive id", result.stdout)
+            self.assertIn("4 Drive link(s)", result.stdout)
+            self.assertIn("had no readable Drive id", result.stdout)
 
     def test_accepted_pointers_are_listed_with_their_links(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -292,7 +343,7 @@ class IndexLinkColumnTests(unittest.TestCase):
             self.assertIn("| Archivo | Tipo | Enlace |", accepted)
             self.assertIn(f"open?id={self.DOC_ID}", accepted)
             self.assertIn("| Archivo | Tipo | Tamaño | Enlace |", index)
-            self.assertRegex(index, r"(?m)^4 archivos ·")
+            self.assertRegex(index, r"(?m)^\d+ archivos ·")
 
 
 if __name__ == "__main__":

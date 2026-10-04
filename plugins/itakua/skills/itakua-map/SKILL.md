@@ -351,7 +351,8 @@ an agent with its own Drive connector opens a cited artifact there, and that is 
   it in Drive: from `My Drive` or `Shared drives` down, never a machine path. It is the
   mapping `link-drive.sh` applies from `drive-map` and `.drive-map.local`, so
   `check-structure.py` proposes the value from this machine's mapping and warns when the
-  key and the link disagree.
+  key and that mapping disagree. Quote it when the folder name holds `: ` or ` #`
+  (`root: 'My Drive/Setlist #2'`); the validator's proposal already does.
 - The key travels with the clone; the link does not. A fresh clone with the key and no
   link is the cue to load `itakua-setup`.
 - Writing it is a README edit, so it needs owner approval.
@@ -437,7 +438,7 @@ context, that is the moment to build one — not before.
 | Script | Does |
 |---|---|
 | `new-node.sh` | Safely scaffolds a node with `notes/`, `log/`, `_tmp/`, and the README template, without overwriting existing files |
-| `check-structure.py` | Validates every node and its local artifact attachment, warns when a README's `artifacts:` key and its `docs/drive` link disagree (proposing the `root` from this machine's mapping), **and** checks the repository's git state — remote, identity — against the bindings declared in the root README. Run after any restructure, and after anything that touches git |
+| `check-structure.py` | Validates every node and its local artifact attachment, warns when a linked node's README lacks the `artifacts:` key, declares it without a link, or names a `root` this machine's mapping contradicts (proposing the `root` from that mapping), **and** checks the repository's git state — remote, identity — against the bindings declared in the root README. Run after any restructure, and after anything that touches git |
 | `index-artifacts.py` | Regenerates a node's `docs/index.md` from its cloud folder, in the node's own language. Flags orphans and cloud-pointer files that cannot be read on disk. Its Link column gives each Google pointer file its Drive URL; other files' cells stay empty rather than guessed |
 
 These scripts live under this skill's `scripts/` directory. Resolve that directory for the

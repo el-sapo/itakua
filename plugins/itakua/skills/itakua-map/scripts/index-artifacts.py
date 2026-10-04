@@ -19,13 +19,14 @@ files, because SKILL.md says not to impose the framework's language on someone's
 material -- and this script used to do exactly that, emitting Spanish everywhere.
 The detected language is printed; override it with --lang es|en when it guesses wrong.
 
-LINKS: every table carries a Link column, because the Reader and agents on the MCP
+LINKS: every per-file table carries a Link column, because the Reader and agents on the MCP
 server cannot open docs/ -- only Drive can -- so a note that cites an artifact someone
 will open carries its Drive URL, and this index is where to copy it from. Google pointer
 files (.gdoc, .gsheet, .gslides) hold their Drive file id on disk, so their link is
 exact. No other file does, and its cell stays EMPTY: a search by name can land on the
 wrong copy, and a wrong link is worse than none. A pass over the Drive API could fill
-those cells later, if it ever proves worth the credentials it needs.
+those cells later, if it ever proves worth the credentials it needs. Folders collapsed
+into a type summary list no files, so they have no cells to fill.
 """
 import os, sys, datetime, json, pathlib, re
 
@@ -109,10 +110,12 @@ def pointer_link(path):
     still streaming, or not shaped like a Drive id gives "", never a guess. The email
     is never copied into the index.
     """
+    if not os.path.isfile(path):
+        return ""
     try:
-        with open(path, encoding="utf-8") as f:
-            data = json.loads(f.read(65536))
-    except (OSError, UnicodeError, ValueError):
+        with open(path, "rb") as f:
+            data = json.loads(f.read(65536).decode("utf-8"))
+    except (OSError, UnicodeError, ValueError, RecursionError):
         return ""
     if not isinstance(data, dict):
         return ""
