@@ -7,16 +7,21 @@
 A folder is either a SLOT (notes/ log/ docs/ _tmp/) directly inside a node, something
 filed INSIDE a slot, or a CHILD NODE (it has its own README.md). Anything else is drift.
 
+A node whose docs/drive is linked declares where that folder lives in Drive with an
+`artifacts:` key in its README frontmatter. Readers that cannot follow the symlink -- the
+Reader, an agent on the MCP server -- have nothing else to go on. A missing, stale or
+orphaned key is a WARNING: the key is optional, and a fresh clone has it before the link.
+
 The git section exists because the structure was never the part that could hurt you.
 A brain declares bindings in its root README -- remote, identity -- and those are the
 things whose failure is silent and unrecoverable. Structure problems are a tidy-up;
 a work brain pushed to a personal account is not.
 """
-import os, sys, pathlib, re, subprocess
+import os, sys, pathlib, re, subprocess, unicodedata
 
 SLOTS = ("notes", "log", "docs", "_tmp")
 REQUIRED = ("notes", "log")
-problems, notes = [], []
+problems, warns, notes = [], [], []
 
 
 # --- structure -------------------------------------------------------------------
@@ -137,6 +142,149 @@ def check_artifacts(found):
             notes.append(f"{n}/ has an unused docs/ slot (no index or drive link)")
 
 
+# --- artifact store declaration ---------------------------------------------------
+
+PROVIDERS = ("google-drive",)
+# The top-level folders of a Google Drive mirror, as Drive names them. A machine path is
+# turned into a Drive root only from one of these; anything else is not proposed.
+DRIVE_ANCHORS = ("My Drive", "Shared drives")
+
+
+def nfc(text):
+    # macOS hands back decomposed file names; a README is usually typed composed.
+    return unicodedata.normalize("NFC", text)
+
+
+def frontmatter(text):
+    """The lines of a leading `---` frontmatter block, or [] when there is none."""
+    lines = text.splitlines()
+    if not lines or lines[0].strip() != "---":
+        return []
+    for i in range(1, len(lines)):
+        if lines[i].strip() in ("---", "..."):
+            return lines[1:i]
+    return []
+
+
+def scalar(value):
+    """A plain YAML scalar: surrounding quotes removed, or a trailing comment dropped."""
+    value = value.strip()
+    quoted = re.match(r"""^(["'])(.*)\1(?:\s+#.*)?$""", value)
+    if quoted:
+        return quoted.group(2)
+    if value.startswith("#"):
+        return ""
+    return re.split(r"\s+#", value, maxsplit=1)[0].strip()
+
+
+def declared_artifacts(text):
+    """The README's `artifacts:` fields as a dict, or None when the key is absent.
+
+    Not a YAML parser, on purpose: frontmatter stays flat apart from this one two-field
+    block, and the validator has to run on a bare python3. A form it cannot read comes
+    back without `root`, which is reported rather than guessed at.
+    """
+    lines = frontmatter(text)
+    for i, line in enumerate(lines):
+        m = re.match(r"artifacts:(.*)$", line)
+        if not m:
+            continue
+        fields = {}
+        if scalar(m.group(1)):
+            return fields                          # inline or flow form
+        for sub in lines[i + 1:]:
+            if not sub.strip() or sub.lstrip().startswith("#"):
+                continue
+            if not sub[:1].isspace():
+                break
+            field = re.match(r"\s+([A-Za-z_]+):(.*)$", sub)
+            if field:
+                fields[field.group(1)] = scalar(field.group(2))
+        return fields
+    return None
+
+
+def drive_root_of(target):
+    """'/Users/x/.../GoogleDrive-x/My Drive/Guitarra' -> 'My Drive/Guitarra', else None."""
+    parts = [nfc(p) for p in re.split(r"[\\/]+", target) if p]
+    for i, part in enumerate(parts):
+        if part in DRIVE_ANCHORS:
+            return "/".join(parts[i:])
+    return None
+
+
+def local_map_target(node_key):
+    """The node's `.drive-map.local` target, read the way link-drive.sh reads it."""
+    path = pathlib.Path(".drive-map.local")
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        return None
+    for line in text.splitlines():
+        if re.match(r"\s*#", line):
+            continue
+        fields = line.split("|")
+        if len(fields) >= 2 and fields[0] == node_key:
+            return fields[1] or None
+    return None
+
+
+def mapped_root(node, drive):
+    """Where this machine's mapping puts the node's artifacts in Drive.
+
+    Returns (root, source), or (None, None) when the mapping does not reach a Drive
+    folder. `.drive-map.local` wins, as it does for link-drive.sh; otherwise the
+    symlink's own target, which is what the committed `drive-map` resolved to here.
+    """
+    target = local_map_target(node.relative_to("spaces").as_posix())
+    if target and drive_root_of(target):
+        return drive_root_of(target), ".drive-map.local"
+    if drive.is_symlink():
+        link = os.path.normpath(os.path.join(str(drive.parent), os.readlink(str(drive))))
+        if drive_root_of(link):
+            return drive_root_of(link), f"the target of {drive}"
+    return None, None
+
+
+def check_artifact_store(found):
+    """Compare each README's `artifacts:` key with the node's docs/drive link."""
+    for n in found:
+        readme = n / "README.md"
+        declared = declared_artifacts(readme.read_text(encoding="utf-8"))
+        drive = n / "docs" / "drive"
+        root, source = mapped_root(n, drive)
+
+        if declared is None:
+            if drive.is_symlink():
+                proposal = (f"; from {source}, propose `provider: google-drive` and "
+                            f"`root: {root}`" if root else
+                            "; set `root` to the Drive folder docs/drive points to, as "
+                            "Drive shows it")
+                warns.append(f"{n}/ has docs/drive but {readme} declares no `artifacts:` "
+                             f"key{proposal}. Adding it is a README edit: owner approval")
+            continue
+
+        declared_root = nfc(declared.get("root", "")).strip("/")
+        provider = declared.get("provider", "")
+        if not declared_root:
+            warns.append(f"{readme} has an `artifacts:` key with no readable `root` -- "
+                         f"use the two-line block form the itakua-map skill defines")
+        elif "<" in declared_root or ">" in declared_root:
+            warns.append(f"{readme} `artifacts.root` is still a placeholder: {declared_root}")
+            declared_root = ""
+        if provider not in PROVIDERS:
+            warns.append(f"{readme} `artifacts.provider` is {provider or 'missing'}; the "
+                         f"framework defines {', '.join(PROVIDERS)}")
+
+        if not os.path.lexists(str(drive)):
+            warns.append(f"{readme} declares `artifacts:` but {drive} is not linked on this "
+                         f"machine -- load itakua-setup to attach it, or drop the key if "
+                         f"the node keeps no artifacts in Drive")
+        elif root and declared_root and declared_root != root:
+            warns.append(f"{readme} declares `artifacts.root: {declared_root}`, but {source} "
+                         f"gives `{root}` -- correct whichever is stale, with owner approval")
+
+
 # --- git state -------------------------------------------------------------------
 
 def git(*args):
@@ -255,16 +403,20 @@ def main():
     found = scan(root)
     check_nodes(found)
     check_artifacts(found)
+    check_artifact_store(found)
     if "--no-git" not in args:
         check_git()
 
     print(f"{len(found)} nodes checked: " + ", ".join(str(n) for n in sorted(found)))
     for m in notes:
         print(f"  note     {m}")
+    for m in warns:
+        print(f"  WARN     {m}")
     for m in problems:
         print(f"  PROBLEM  {m}")
-    print("\nOK -- structure and bindings are consistent." if not problems
-          else f"\n{len(problems)} problem(s).")
+    tail = f" {len(warns)} warning(s)." if warns else ""
+    print("\nOK -- structure and bindings are consistent." + tail if not problems
+          else f"\n{len(problems)} problem(s).{tail}")
     return 1 if problems else 0
 
 

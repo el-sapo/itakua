@@ -18,11 +18,20 @@ LANGUAGE: the index follows the NODE's language, detected from its own README an
 files, because SKILL.md says not to impose the framework's language on someone's
 material -- and this script used to do exactly that, emitting Spanish everywhere.
 The detected language is printed; override it with --lang es|en when it guesses wrong.
+
+LINKS: every table carries a Link column, because the Reader and agents on the MCP
+server cannot open docs/ -- only Drive can -- so a note that cites an artifact someone
+will open carries its Drive URL, and this index is where to copy it from. Google pointer
+files (.gdoc, .gsheet, .gslides) hold their Drive file id on disk, so their link is
+exact. No other file does, and its cell stays EMPTY: a search by name can land on the
+wrong copy, and a wrong link is worse than none. A pass over the Drive API could fill
+those cells later, if it ever proves worth the credentials it needs.
 """
-import os, sys, datetime, pathlib
+import os, sys, datetime, json, pathlib, re
 
 COLLAPSE_OVER = 12   # folders bigger than this are summarised by type
 POINTERS = {".gdoc": "Google Doc", ".gsheet": "Google Sheet", ".gslides": "Google Slides"}
+DRIVE_ID = re.compile(r"[A-Za-z0-9_-]{10,}")
 
 ES_HINTS = (" que ", " de la ", " para ", " con ", " los ", " las ", " una ", " esta ",
             " como ", " pero ", " porque ", " cuando ", " donde ", " del ", " se ")
@@ -40,12 +49,12 @@ STRINGS = {
         "folder_sub": "*{n} archivos · {size}*",
         "collapsed":  "*Carpeta de assets — resumida por tipo.*",
         "th_type":    "| Tipo | Archivos | Tamaño |",
-        "th_file":    "| Archivo | Tipo | Tamaño |",
+        "th_file":    "| Archivo | Tipo | Tamaño | Enlace |",
         "ptr_head":   "## ⚠️ Punteros de Google pendientes",
         "ptr_body":   ["Cada uno pesa 176 bytes y **no se puede leer ni editar en disco** — son enlaces.",
                        "Migrar a markdown en git, o exportar a un formato real.",
                        "Si alguno debe quedarse así, agregarlo a `docs/pointers-ok.md`."],
-        "ptr_th":     "| Archivo | Tipo |",
+        "ptr_th":     "| Archivo | Tipo | Enlace |",
         "ptr_ok":     "## Punteros aceptados ({n})",
         "ptr_ok_sub": "Se quedan como Google Docs a propósito — ver `docs/pointers-ok.md`.",
         "orph_head":  "## 🚨 Archivos huérfanos — en NINGÚN sistema",
@@ -66,12 +75,12 @@ STRINGS = {
         "folder_sub": "*{n} files · {size}*",
         "collapsed":  "*Asset folder — summarised by type.*",
         "th_type":    "| Type | Files | Size |",
-        "th_file":    "| File | Type | Size |",
+        "th_file":    "| File | Type | Size | Link |",
         "ptr_head":   "## ⚠️ Google pointers to deal with",
         "ptr_body":   ["Each is 176 bytes and **cannot be read or edited on disk** — they are links.",
                        "Migrate to markdown in git, or export to a real format.",
                        "If one should stay as it is, add it to `docs/pointers-ok.md`."],
-        "ptr_th":     "| File | Kind |",
+        "ptr_th":     "| File | Kind | Link |",
         "ptr_ok":     "## Accepted pointers ({n})",
         "ptr_ok_sub": "Deliberately left as Google files — see `docs/pointers-ok.md`.",
         "orph_head":  "## 🚨 Orphan files — in NO system at all",
@@ -90,6 +99,40 @@ def human(n):
         if n < 1024 or unit == "GB":
             return f"{n:.0f} {unit}" if unit in ("B", "KB") else f"{n:.1f} {unit}"
         n /= 1024
+
+
+def pointer_link(path):
+    """The Drive URL of a Google pointer file, from the id it holds, or "".
+
+    Drive for Desktop writes a small JSON stub -- {"doc_id": ..., "resource_key": ...,
+    "email": ...}; older Backup and Sync stubs carry doc_id too. Anything unreadable,
+    still streaming, or not shaped like a Drive id gives "", never a guess. The email
+    is never copied into the index.
+    """
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.loads(f.read(65536))
+    except (OSError, UnicodeError, ValueError):
+        return ""
+    if not isinstance(data, dict):
+        return ""
+    file_id = data.get("doc_id")
+    if not isinstance(file_id, str):
+        rid = data.get("resource_id")
+        m = re.fullmatch(r"(?:document|spreadsheet|presentation):(.+)", rid) \
+            if isinstance(rid, str) else None
+        file_id = m.group(1) if m else ""
+    if not DRIVE_ID.fullmatch(file_id):
+        return ""
+    url = f"https://drive.google.com/open?id={file_id}"
+    key = data.get("resource_key")
+    if isinstance(key, str) and re.fullmatch(r"[A-Za-z0-9_-]+", key):
+        url += f"&resourcekey={key}"
+    return url
+
+
+def link_cell(url):
+    return f"<{url}>" if url else ""
 
 
 def domain_of(node):
@@ -159,7 +202,8 @@ def main():
             size = os.path.getsize(os.path.join(dirpath, fn))
             count += 1
             if ext in POINTERS:
-                pointers.append((os.path.join(rel, fn) if rel else fn, POINTERS[ext]))
+                pointers.append((os.path.join(rel, fn) if rel else fn, POINTERS[ext],
+                                 pointer_link(os.path.join(dirpath, fn))))
                 continue
             total += size
             groups.setdefault(rel or S["root_key"], []).append((fn, size, ext))
@@ -189,9 +233,10 @@ def main():
                 n, s = byext[e]
                 out.append(f"| {e} | {n} | {human(s)} |")
         else:
-            out += [S["th_file"], "|---|---|---|"]
+            # No file id on disk outside pointer files: the link cell stays empty.
+            out += [S["th_file"], "|---|---|---|---|"]
             for fn, size, ext in files:
-                out.append(f"| `{fn}` | {ext.lstrip('.') or '—'} | {human(size)} |")
+                out.append(f"| `{fn}` | {ext.lstrip('.') or '—'} | {human(size)} | |")
         out.append("")
 
     # Pointers deliberately left as Google files are listed in docs/pointers-ok.md.
@@ -199,19 +244,23 @@ def main():
     okfile = pathlib.Path(node) / "docs" / "pointers-ok.md"
     acked = set()
     if okfile.exists():
-        import re as _re
-        acked = set(_re.findall(r"`([^`]+)`", okfile.read_text(encoding="utf-8")))
+        acked = set(re.findall(r"`([^`]+)`", okfile.read_text(encoding="utf-8")))
 
-    todo = [(f, k) for f, k in pointers if f not in acked]
-    ok   = [(f, k) for f, k in pointers if f in acked]
+    todo = [p for p in pointers if p[0] not in acked]
+    ok   = [p for p in pointers if p[0] in acked]
 
     if todo:
-        out += [S["ptr_head"], ""] + S["ptr_body"] + ["", S["ptr_th"], "|---|---|"]
-        for f, kind in sorted(todo):
-            out.append(f"| `{f}` | {kind} |")
+        out += [S["ptr_head"], ""] + S["ptr_body"] + ["", S["ptr_th"], "|---|---|---|"]
+        for f, kind, url in sorted(todo):
+            out.append(f"| `{f}` | {kind} | {link_cell(url)} |")
         out.append("")
     if ok:
-        out += [S["ptr_ok"].format(n=len(ok)), "", S["ptr_ok_sub"], ""]
+        # Listed, not just counted: accepted pointers are the files notes link to.
+        out += [S["ptr_ok"].format(n=len(ok)), "", S["ptr_ok_sub"], "",
+                S["ptr_th"], "|---|---|---|"]
+        for f, kind, url in sorted(ok):
+            out.append(f"| `{f}` | {kind} | {link_cell(url)} |")
+        out.append("")
 
     # --- guard: files parked in docs/ but not under docs/drive/ ---
     # gitignored by **/docs/*, and outside the symlink, so in NEITHER git NOR cloud.
@@ -246,8 +295,12 @@ def main():
     dest = os.path.join(node, "docs", "index.md")
     pathlib.Path(dest).write_text("\n".join(out), encoding="utf-8")
     how = "forced" if lang else "detected"
+    linked = sum(1 for p in pointers if p[2])
     print(f"wrote {dest} [{detected}, {how}]: {count} files, {len(todo)} pointers to "
-          f"migrate ({len(ok)} accepted), {human(total)}")
+          f"migrate ({len(ok)} accepted), {linked} Drive link(s), {human(total)}")
+    if linked < len(pointers):
+        print(f"  {len(pointers) - linked} pointer(s) had no readable Drive id; their "
+              f"link cells are empty (is the folder Available offline?)")
     if orphans:
         print(f"  🚨 WARNING: {len(orphans)} orphan file(s) ({human(orphan_bytes)}) in "
               f"{docs_dir} are in NEITHER git NOR cloud storage — move them under docs/drive/")

@@ -59,6 +59,8 @@ Anything else is temporary.** That one rule is what stops this sprawling:
 - **Portable core, machine-local edges.** `notes/`, `log/`, the READMEs and `drive-map`
   travel with the clone. `docs/drive` symlinks and `_tmp/` staging are per-machine. The
   validator makes a missing artifact attachment visible; the cloud data itself is not lost.
+  A README's `artifacts:` key travels too: it is how readers that cannot follow the
+  symlink learn where `docs/` lives in Drive (see **Frontmatter**).
 
 `notes/` and `log/` are required. New nodes also create `_tmp/` with the safe manual
 contract below; existing or deliberately minimal nodes may omit it. `docs/` is optional.
@@ -270,7 +272,8 @@ asked once per node, and worth asking because every later file matches the first
 1. Run `new-node.sh spaces/<name>` or copy the whole template directory bundled here at
    `assets/template/` to the new path. This creates `notes/`, `log/`, and `_tmp/` by
    default.
-2. With owner approval, fill every `<placeholder>` in its durable `README.md`.
+2. With owner approval, fill every `<placeholder>` in its durable `README.md`. Leave the
+   commented `artifacts:` key commented until the node's `docs/drive` is linked.
 3. State in Conventions **what this node's own slots hold** once it has children. This is
    the sentence every future agent reads to decide where things go.
 4. State whether it ends. Most do not.
@@ -321,7 +324,60 @@ back only when a script actually needs to read it, and only where that script lo
 `domain: consulting`. The path already says which node it is in; `domain` exists to group
 across the repo, so its set of values stays small.
 
-Keep frontmatter flat. Complex YAML is a known parse-failure source.
+Keep frontmatter flat. Complex YAML is a known parse-failure source. The one exception is
+`artifacts:` below: a fixed two-field block on node READMEs. Nothing else nests.
+
+### `artifacts:` — where a node's `docs/` lives in Drive
+
+A node README whose `docs/drive` is linked declares the Drive folder behind it:
+
+```yaml
+artifacts:
+  provider: google-drive
+  root: My Drive/Guitarra
+```
+
+**Why it exists.** Only the owner's machine can follow `docs/drive`. The symlink is
+per-machine, git ignores what it holds, and the Reader and every agent reading the brain
+through the read-only MCP server get notes and READMEs, never `docs/`. Only Drive can
+open those files. Without the key, an agent has to infer from README prose which Drive
+folder `docs/` is, then hunt for a cited file by title. With it, the handoff is explicit:
+an agent with its own Drive connector opens a cited artifact there, and that is intended.
+
+- **Optional.** Only a node with a `docs/drive` link carries it. Every other node omits
+  it — no empty `artifacts:`.
+- `provider` is `google-drive`, the only store the framework defines.
+- `root` is the Drive folder this node's `docs/drive` points to, written as a person sees
+  it in Drive: from `My Drive` or `Shared drives` down, never a machine path. It is the
+  mapping `link-drive.sh` applies from `drive-map` and `.drive-map.local`, so
+  `check-structure.py` proposes the value from this machine's mapping and warns when the
+  key and the link disagree.
+- The key travels with the clone; the link does not. A fresh clone with the key and no
+  link is the cue to load `itakua-setup`.
+- Writing it is a README edit, so it needs owner approval.
+
+## Citing an artifact
+
+Nothing but Drive opens `docs/` (see `artifacts:` above), so how a note cites an artifact
+depends on whether anyone will want to open it.
+
+- **A reader or agent will want to open it** — a tab to play from, an inventory to check,
+  a contract to read: the citation carries the Drive URL. Make the `docs/` path the link
+  text, so one citation says both where the file sits in the tree and where to open it:
+
+  ```markdown
+  Full tab in [`docs/drive/songs/rock esp/El pibe de los astilleros.docx`](https://drive.google.com/file/d/<id>/view).
+  ```
+
+  Linking the title instead — `[My Gear.docx](https://drive.google.com/open?id=<id>)` —
+  also meets the rule. Prefer the path when you know it: a reader can join it to the
+  node's `root` and name the folder.
+- **It is only context** — provenance, the source a note was distilled from: a path-only
+  citation is fine.
+
+Take the URL from the generated `docs/index.md`, which carries it for Google pointer files,
+from Drive's *Copy link*, or from an agent's own Drive connector. Never build one from a
+guessed id. Adding a URL to an existing note is a `notes/` edit and needs owner approval.
 
 ## When a node goes dormant
 
@@ -381,8 +437,8 @@ context, that is the moment to build one — not before.
 | Script | Does |
 |---|---|
 | `new-node.sh` | Safely scaffolds a node with `notes/`, `log/`, `_tmp/`, and the README template, without overwriting existing files |
-| `check-structure.py` | Validates every node and its local artifact attachment, **and** checks the repository's git state — remote, identity — against the bindings declared in the root README. Run after any restructure, and after anything that touches git |
-| `index-artifacts.py` | Regenerates a node's `docs/index.md` from its cloud folder, in the node's own language. Flags orphans and cloud-pointer files that cannot be read on disk |
+| `check-structure.py` | Validates every node and its local artifact attachment, warns when a README's `artifacts:` key and its `docs/drive` link disagree (proposing the `root` from this machine's mapping), **and** checks the repository's git state — remote, identity — against the bindings declared in the root README. Run after any restructure, and after anything that touches git |
+| `index-artifacts.py` | Regenerates a node's `docs/index.md` from its cloud folder, in the node's own language. Flags orphans and cloud-pointer files that cannot be read on disk. Its Link column gives each Google pointer file its Drive URL; other files' cells stay empty rather than guessed |
 
 These scripts live under this skill's `scripts/` directory. Resolve that directory for the
 current command, run the scripts from the brain root, and never persist an installed-skill
