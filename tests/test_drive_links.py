@@ -145,7 +145,7 @@ class DriveRootDeclarationTests(unittest.TestCase):
             self.assertIn(f"root: My Drive/{composed}", "\n".join(self.warnings(proposed)))
 
     def test_proposed_root_round_trips_for_awkward_folder_names(self):
-        for folder in ("Setlist #2", "Clases: 2026", "Notas:", "Fer's Guitar"):
+        for folder in ("Setlist #2", "Clases: 2026", "Notas:", "Fer's Guitar", "Set\tlist"):
             with self.subTest(folder=folder), tempfile.TemporaryDirectory() as temp:
                 brain, node = self.make_brain(temp)
                 (node / "docs" / "drive").symlink_to(
@@ -196,6 +196,9 @@ class DriveRootDeclarationTests(unittest.TestCase):
             "artifacts:\n  provider: gdrive\n  root: My Drive/Project\n": "gdrive",
             "artifacts:\n  provider: google-drive\n  root: My Drive/A: B\n": "no readable `root`",
             "artifacts:\n\tprovider: google-drive\n\troot: My Drive/Project\n": "no readable `root`",
+            "artifacts:\n  provider: google-drive\n  \troot: My Drive/Project\n": "no readable `root`",
+            # A lone surrogate escape must be reported, not crash the printed warning.
+            'artifacts:\n  provider: "\\ud800"\n  root: "My Drive/\\udfff"\n': "no readable `root`",
         }
         for frontmatter, expected in cases.items():
             with self.subTest(frontmatter=frontmatter), tempfile.TemporaryDirectory() as temp:

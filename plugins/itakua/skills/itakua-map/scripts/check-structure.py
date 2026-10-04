@@ -148,6 +148,8 @@ PROVIDERS = ("google-drive",)
 # The top-level folders of a Google Drive mirror, as Drive names them. A machine path is
 # turned into a Drive root only from one of these; anything else is not proposed.
 DRIVE_ANCHORS = ("My Drive", "Shared drives")
+# Characters YAML will not take raw in a plain or single-quoted scalar, plus surrogates.
+UNPRINTABLE = re.compile("[\x00-\x1f\x7f-\x9f\u2028\u2029\ud800-\udfff]")
 
 
 def nfc(text):
@@ -172,24 +174,34 @@ def scalar(value):
     None for a value YAML would read differently from how it looks -- an unquoted `: `
     or trailing `:` -- so the caller reports it instead of agreeing with a wrong value.
     """
-    value = value.strip()
+    value = value.strip(" \t")                     # YAML whitespace, not Unicode's
     if value.startswith("'"):
-        m = re.fullmatch(r"'((?:[^']|'')*)'(?:\s+#.*)?", value)
-        return m.group(1).replace("''", "'") if m else None
-    if value.startswith('"'):
-        m = re.fullmatch(r'"((?:[^"\\]|\\.)*)"(?:\s+#.*)?', value)
+        m = re.fullmatch(r"'((?:[^']|'')*)'(?:[ \t]+#.*)?", value)
+        value = m.group(1).replace("''", "'") if m else None
+    elif value.startswith('"'):
+        m = re.fullmatch(r'"((?:[^"\\]|\\.)*)"(?:[ \t]+#.*)?', value)
         try:
-            return json.loads(f'"{m.group(1)}"') if m else None
+            value = json.loads(f'"{m.group(1)}"') if m else None
         except ValueError:
-            return None
-    if value.startswith("#"):
+            value = None
+        # Escapes may carry control characters, which YAML allows here; a lone
+        # surrogate is not text at all and would crash the warning that prints it.
+        return None if value is None or re.search("[\ud800-\udfff]", value) else value
+    elif value.startswith("#"):
         return ""
-    value = re.split(r"\s+#", value, maxsplit=1)[0].strip()
-    return None if re.search(r":(\s|$)", value) else value
+    else:
+        value = re.split(r"[ \t]+#", value, maxsplit=1)[0].strip(" \t")
+        if re.search(r":([ \t]|$)", value):
+            return None
+    return None if value is None or UNPRINTABLE.search(value) else value
 
 
 def yaml_scalar(value):
     """`value` written so that YAML and scalar() both read it back unchanged."""
+    if UNPRINTABLE.search(value):
+        # Only a double-quoted scalar can carry these, and only as escapes.
+        return '"' + re.sub(r'[\x00-\x1f\x7f-\x9f\u2028\u2029"\\]',
+                            lambda m: f"\\u{ord(m.group()):04x}", value) + '"'
     if re.search(r""":(\s|$)|\s#|^\s|\s$|^[-?:,\[\]{}#&*!|>'"%@`]""", value):
         return "'" + value.replace("'", "''") + "'"
     return value
@@ -215,7 +227,7 @@ def declared_artifacts(text):
                 continue
             if not sub[:1].isspace():
                 break
-            if sub.startswith("\t"):
+            if "\t" in sub[:len(sub) - len(sub.lstrip())]:
                 return {}                          # YAML forbids tab indentation
             field = re.match(r"\s+([A-Za-z_]+):(.*)$", sub)
             if field:
