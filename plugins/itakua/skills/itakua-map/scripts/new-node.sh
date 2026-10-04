@@ -54,4 +54,6 @@ touch "$DEST/notes/.gitkeep" "$DEST/log/.gitkeep" "$DEST/_tmp/.gitkeep"
 
 echo "created $DEST with notes/, log/, and manual _tmp/ staging"
 echo "next: with owner approval, fill every <placeholder> in $DEST/README.md"
+echo "      leave its commented artifacts: key alone until docs/drive is linked, then"
+echo "      uncomment it with the Drive root check-structure.py proposes"
 echo "then: run check-structure.py from the brain root"

@@ -3,6 +3,9 @@ type: readme
 domain: <domain>
 date: <YYYY-MM-DD>
 tags: []
+# artifacts:                  # uncomment once docs/drive is linked -- see itakua-map
+#   provider: google-drive
+#   root: My Drive/<folder>   # the Drive folder docs/drive points to, as Drive shows it
 ---
 
 # <Node name>
@@ -24,7 +27,7 @@ tags: []
 |--------|----------------|
 | `notes/` | Distilled knowledge. Mutable with owner approval as understanding improves. |
 | `log/` | Dated raw evidence. Append-only; correct by adding a later entry. |
-| `docs/` | *Optional.* Cloud-synced artifacts + generated `index.md`. Durable writes require owner approval. Remove this row if unused. |
+| `docs/` | *Optional.* Cloud-synced artifacts + generated `index.md`. Durable writes require owner approval. Once `docs/drive` is linked, declare its Drive folder in the `artifacts:` frontmatter key. Remove this row if unused. |
 | `_tmp/` | Manual staging. No automatic processing and no deletion without owner approval. |
 | `<child>/` | *Optional.* A nested node with its own `README.md` — e.g. a project inside a space. |
 

@@ -17,8 +17,9 @@ two skills with distinct triggers:
 - `itakua-map/scripts/new-node.sh` creates `notes/`, `log/`, and `_tmp/` for a node and
   installs its README template without overwriting existing files.
 - `itakua-map/scripts/check-structure.py` validates nodes, local artifact reachability,
-  and the brain's declared Git bindings.
-- `itakua-map/scripts/index-artifacts.py` generates an approved index of cloud artifacts.
+  each linked node's declared Drive root, and the brain's declared Git bindings.
+- `itakua-map/scripts/index-artifacts.py` generates an approved index of cloud artifacts,
+  with Drive links for Google pointer files.
 - `itakua-setup/scripts/link-drive.sh` combines committed `drive-map` knowledge with
   machine-local cloud paths to recreate mapped `docs/drive` symlinks.
 
