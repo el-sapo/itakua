@@ -117,13 +117,34 @@ write_file "$DEST/.gitignore" <<'EOF'
 *.xlsx
 *.pptx
 
+# --- Inboxes: text is tracked, every other file stays on this machine ---
+# An allowlist, not a denylist: an inbox accepts any file, and the list above misses
+# .heic, .webp, .gif, .epub and whatever comes next. Git cannot tell a node's inbox/
+# slot from any other folder named inbox, so do not name a node or a filing subfolder
+# that. An owner who wants a binary versioned anyway can still `git add -f` it.
+**/inbox/**
+!**/inbox/**/
+!**/inbox/**/*.md
+!**/inbox/**/*.txt
+!**/inbox/**/*.html
+!**/inbox/**/.gitkeep
+/00-inbox/**
+!/00-inbox/**/
+!/00-inbox/**/*.md
+!/00-inbox/**/*.txt
+!/00-inbox/**/*.html
+!/00-inbox/**/.gitkeep
+
 # --- Local-only ---
 .obsidian/
 .trash/
 .coda/
+# legacy staging, replaced by inbox/ in 0.5.0; whatever sits there stays local
 _tmp/
 .drive-map.local
 *.skill
+# generated per machine by check-structure.py --report; never committed
+/status.html
 EOF
 
 write_file "$DEST/drive-map" <<'EOF'
@@ -174,7 +195,7 @@ per-machine setup procedures in **\`itakua-setup\`**.
 $(basename "$DEST")/
 ├── README.md      ← you are here. Bindings and clone setup
 ├── drive-map      ← portable node-to-artifact-folder mappings
-├── 00-inbox/      ← capture anything, sort later
+├── 00-inbox/      ← capture anything, sort later (text tracked, the rest local)
 └── spaces/         ← all content. Each folder is a node with its own README
 \`\`\`
 EOF
@@ -235,9 +256,8 @@ cat <<'EOF'
 computer starts with nothing, and this is the step people skip.
 
 **2. Start a fresh agent session**, then ask it to load `itakua-setup` and bring this
-clone into working order. The setup skill checks repository-local Git identity, restores
-declared `_tmp/` folders, validates the tree, and attaches mapped artifacts when their
-machine-local cloud root is available.
+clone into working order. The setup skill checks repository-local Git identity, validates
+the tree, and attaches mapped artifacts when their machine-local cloud root is available.
 
 Portable node-to-folder mappings live in committed `drive-map`. Machine-specific absolute
 overrides live in gitignored `.drive-map.local`.

@@ -155,7 +155,7 @@
 
   <figure>
     <div class="figbox">
-      <svg viewBox="0 0 900 470" role="img" aria-label="Three layers. The plugin, installed in your agent, operates on a node. The node holds four slots: notes, log, docs and _tmp. Notes and log are committed to a local git repository. Docs is a symlink out to cloud storage. _tmp is manual staging in neither system and is never processed automatically.">
+      <svg viewBox="0 0 900 470" role="img" aria-label="Three layers. The plugin, installed in your agent, operates on a node. The node holds four slots: notes, log, docs and inbox. Notes and log are committed to a local git repository. Docs is a symlink out to cloud storage. Inbox holds captured material: its text is committed, other files stay on this machine, and nothing processes it automatically.">
         <defs>
           <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
             <path d="M 0 0 L 10 5 L 0 10 z" class="d-ink"></path>
@@ -208,9 +208,9 @@
         <text x="584" y="212" text-anchor="middle" font-size="11" class="t-body d-mut">durable writes need approval</text>
 
         <rect x="687" y="150" width="177" height="86" rx="4" fill="none" class="s-ink" stroke-width="1" stroke-dasharray="4 4" opacity="0.6"></rect>
-        <text x="775" y="176" text-anchor="middle" font-size="13" font-weight="500" class="t-mono d-ink">_tmp/</text>
-        <text x="775" y="196" text-anchor="middle" font-size="11" class="t-body d-mut">manual staging</text>
-        <text x="775" y="212" text-anchor="middle" font-size="11" class="t-body d-mut">no auto-processing/deletion</text>
+        <text x="775" y="176" text-anchor="middle" font-size="13" font-weight="500" class="t-mono d-ink">inbox/</text>
+        <text x="775" y="196" text-anchor="middle" font-size="11" class="t-body d-mut">captured, not filed</text>
+        <text x="775" y="212" text-anchor="middle" font-size="11" class="t-body d-mut">never processed unattended</text>
 
         <!-- arrows down to storage -->
         <path d="M 202 236 L 202 285 L 290 285 L 290 322" fill="none" class="s-git" stroke-width="1.4" marker-end="url(#ar-git)"></path>
@@ -220,8 +220,9 @@
         <line x1="584" y1="236" x2="584" y2="322" class="s-cloud" stroke-width="1.4" marker-end="url(#ar-cloud)"></line>
         <text x="594" y="283" font-size="10.5" class="t-mono d-cloud">docs/drive → symlink</text>
 
-        <line x1="775" y1="236" x2="775" y2="300" class="s-ink" stroke-width="1.2" stroke-dasharray="4 4" opacity="0.5"></line>
-        <text x="775" y="322" text-anchor="middle" font-size="11.5" font-style="italic" class="t-body d-mut">in neither system</text>
+        <line x1="775" y1="236" x2="775" y2="282" class="s-ink" stroke-width="1.2" stroke-dasharray="4 4" opacity="0.5"></line>
+        <text x="775" y="300" text-anchor="middle" font-size="11.5" font-style="italic" class="t-body d-mut">text committed,</text>
+        <text x="775" y="316" text-anchor="middle" font-size="11.5" font-style="italic" class="t-body d-mut">binaries stay local</text>
 
         <!-- Layer 1: storage -->
         <rect x="160" y="324" width="280" height="76" rx="6" stroke-width="1.4" class="d-surf s-git"></rect>
@@ -237,20 +238,20 @@
         <text x="100" y="432" font-size="11.5" class="t-body d-mut">git never sees the binaries · Drive never sees the markdown · the two subtrees are disjoint by construction</text>
       </svg>
     </div>
-    <figcaption>Every file in a node lands in exactly one of three places. <span class="path-git">notes/</span> and <span class="path-git">log/</span> are committed; <span class="path-cloud">docs/drive</span> is a symlink into cloud storage and is gitignored; <span class="path">_tmp/</span> is in neither, on purpose.</figcaption>
+    <figcaption>Every file in a node lands in exactly one of three places. <span class="path-git">notes/</span> and <span class="path-git">log/</span> are committed; <span class="path-cloud">docs/drive</span> is a symlink into cloud storage and is gitignored; <span class="path">inbox/</span> commits its text and keeps other files on this machine until they are filed.</figcaption>
   </figure>
 
   <h2>The parts worth knowing</h2>
 
   <p><strong>A node is any folder with a <code>README.md</code>.</strong> All nodes live under <code>spaces/</code>. Nesting means containment, not lifecycle — a project inside a space is nested because it lives there, not because it ends. Whether a node ever finishes is something its own README declares.</p>
 
-  <p><strong>Four slots, and one rule that closes the system:</strong> a folder is either a slot, or a child node with its own README. Anything else is temporary. That single sentence is what the validator enforces, which is why the structure doesn't quietly rot into invented folders.</p>
+  <p><strong>Four slots, and one rule that closes the system:</strong> a folder is either a slot, or a child node with its own README. Anything else is limbo — the owner's own space, which agents leave alone. The validator names every limbo folder instead of failing on it, so nothing invented hides in the tree.</p>
 
   <p><strong><span class="path-git">notes/</span> changes with owner approval; <span class="path-git">log/</span> is append-only.</strong> Notes say what's true now. Logs preserve dated raw evidence, and corrections arrive as later entries instead of rewriting history.</p>
 
   <p><strong><span class="path-cloud">docs/</span> is the durable-artifact boundary.</strong> Creation and editing require owner approval. Binaries live in cloud storage; git holds an approved generated index so the Markdown side knows what exists.</p>
 
-  <p><strong><span class="path">_tmp/</span> is manual staging.</strong> New nodes include it by default. Scheduled and unattended passes do not process it, and nothing there is deleted without owner approval.</p>
+  <p><strong><span class="path">inbox/</span> is captured, not filed.</strong> New nodes include it by default, so every capture tool has a place to write. Nothing there is a source: its text is committed, other files stay on this machine, unattended passes do not process it, and nothing is removed without owner approval.</p>
 
   <h2>Install with Claude</h2>
   <pre>claude plugin marketplace add el-sapo/itakua --scope user

@@ -15,8 +15,11 @@ Every brain stores its nodes under `spaces/`. Every node has four slots:
 - `notes/` — distilled knowledge; agents may edit it only with owner approval.
 - `log/` — dated raw evidence; append-only and never silently rewritten.
 - `docs/` — optional durable artifacts; creation or editing requires owner approval.
-- `_tmp/` — manual staging; never processed automatically and never deleted without
-  owner approval.
+- `inbox/` — captured, not yet filed; text is tracked, other files stay on the machine.
+  Nothing there is a source, nothing processes it unattended, and nothing is removed
+  without owner approval.
+
+Any other folder inside a node is limbo: the owner's own space, which agents leave alone.
 
 See the [one-page overview](docs/index.html) for the architecture.
 

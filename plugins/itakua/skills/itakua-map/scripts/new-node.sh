@@ -48,11 +48,11 @@ if [ ! -f "$TEMPLATE/README.md" ]; then
   exit 1
 fi
 
-mkdir -p "$DEST"/{notes,log,_tmp}
+mkdir -p "$DEST"/{notes,log,inbox}
 cp "$TEMPLATE/README.md" "$DEST/README.md"
-touch "$DEST/notes/.gitkeep" "$DEST/log/.gitkeep" "$DEST/_tmp/.gitkeep"
+touch "$DEST/notes/.gitkeep" "$DEST/log/.gitkeep" "$DEST/inbox/.gitkeep"
 
-echo "created $DEST with notes/, log/, and manual _tmp/ staging"
+echo "created $DEST with notes/, log/, and inbox/"
 echo "next: with owner approval, fill every <placeholder> in $DEST/README.md"
 echo "      leave its commented artifacts: key alone until docs/drive is linked, then"
 echo "      uncomment it with the Drive root check-structure.py proposes"

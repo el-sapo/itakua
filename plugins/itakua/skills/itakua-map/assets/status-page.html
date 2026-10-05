@@ -1,0 +1,208 @@
+<!doctype html>
+<!-- The template check-structure.py --report fills in. It lives in the skill so brains
+     never carry a copy; a brain holds only the generated status.html, which is
+     gitignored. Self-contained on purpose: no scripts, no fonts or files fetched, so it
+     opens offline from Finder or the Files app. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>$brain · brain status</title>
+<style>
+  :root {
+    --ground:     #F1F3F5;
+    --surface:    #FFFFFF;
+    --ink:        #1C2530;
+    --muted:      #5C6B7A;
+    --line:       #D3DAE0;
+    --git:        #2F5D8C;
+    --bad:        #A3271F;
+    --bad-fill:   #FBEAE8;
+    --warn:       #855610;
+    --warn-fill:  #F7EEDC;
+    --ok:         #2B6543;
+    --ok-fill:    #E4F1E8;
+
+    --display: "Newsreader", Georgia, "Times New Roman", serif;
+    --body: "Public Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground:     #14181C;
+      --surface:    #1B2026;
+      --ink:        #E3E8ED;
+      --muted:      #93A1AE;
+      --line:       #2C343C;
+      --git:        #7FA8D4;
+      --bad:        #F08A80;
+      --bad-fill:   #35201E;
+      --warn:       #D9A650;
+      --warn-fill:  #2B2418;
+      --ok:         #7CC79A;
+      --ok-fill:    #1A2D22;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 15px;
+    line-height: 1.55;
+  }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 40px 16px 64px; }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 0.5rem;
+  }
+  h1, h2 { font-family: var(--display); font-weight: 600; line-height: 1.15; margin: 0; }
+  h1 { font-size: clamp(1.8rem, 5vw, 2.4rem); overflow-wrap: anywhere; }
+  h2 { font-size: 1.3rem; margin: 2.5rem 0 0.75rem; }
+  .meta { color: var(--muted); margin: 0.5rem 0 0; }
+  code, .mono { font-family: var(--mono); font-size: 0.9em; }
+
+  .verdict {
+    margin: 1.5rem 0 0;
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    border: 1px solid currentColor;
+    font-weight: 600;
+  }
+  .verdict.ok  { color: var(--ok);  background: var(--ok-fill); }
+  .verdict.bad { color: var(--bad); background: var(--bad-fill); }
+
+  .tiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px;
+    margin-top: 1rem;
+  }
+  .tile {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 0.7rem 0.9rem;
+  }
+  .tile .num {
+    font-family: var(--display);
+    font-size: 1.9rem;
+    font-weight: 600;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+  }
+  .tile .label { color: var(--muted); font-size: 0.82rem; }
+  .tile.bad .num  { color: var(--bad); }
+  .tile.warn .num { color: var(--warn); }
+  .tile.attn .num { color: var(--git); }
+
+  .card, .node {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 1rem 1.1rem;
+  }
+  .node { margin-top: 10px; margin-left: calc(var(--depth, 0) * 20px); }
+  .node h3 {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.5rem;
+    margin: 0 0 0.6rem;
+    font-size: 1rem;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+  }
+  .badge {
+    font-family: var(--body);
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.05rem 0.55rem;
+    border-radius: 999px;
+  }
+  .b-problem { color: var(--bad);  background: var(--bad-fill); }
+  .b-warn    { color: var(--warn); background: var(--warn-fill); }
+
+  dl.facts {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 0.25rem 1.25rem;
+    margin: 0;
+  }
+  dl.facts dt { color: var(--muted); }
+  dl.facts dd { margin: 0; overflow-wrap: anywhere; }
+  .attn { color: var(--git); }
+  .quiet { color: var(--muted); }
+  details summary { cursor: pointer; }
+  details ul {
+    margin: 0.4rem 0 0;
+    padding-left: 1.1rem;
+    font-family: var(--mono);
+    font-size: 0.85em;
+  }
+
+  .findings {
+    list-style: none;
+    margin: 0.8rem 0 0;
+    padding: 0;
+    border-top: 1px solid var(--line);
+  }
+  .findings li {
+    display: flex;
+    gap: 0.75rem;
+    padding: 0.45rem 0;
+    border-bottom: 1px solid var(--line);
+    overflow-wrap: anywhere;
+  }
+  .findings li:last-child { border-bottom: 0; }
+  .findings .tag {
+    flex: none;
+    width: 4.5rem;
+    padding-top: 0.12rem;
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    font-weight: 500;
+  }
+  .f-problem .tag { color: var(--bad); }
+  .f-warn .tag    { color: var(--warn); }
+  .f-note .tag    { color: var(--muted); }
+  .card > .quiet, .node > .quiet { margin: 0.8rem 0 0; }
+
+  footer { margin-top: 3rem; color: var(--muted); font-size: 0.85rem; }
+
+  @media (max-width: 560px) {
+    dl.facts { grid-template-columns: 1fr; gap: 0; }
+    dl.facts dd { margin-bottom: 0.45rem; }
+    .node { margin-left: calc(var(--depth, 0) * 8px); }
+    .findings li { flex-direction: column; gap: 0.1rem; }
+  }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <p class="eyebrow">Itakua · brain status</p>
+  <h1>$brain</h1>
+  <p class="meta">Generated $generated on <span class="mono">$host</span>. A snapshot:
+    run <code>check-structure.py --report</code> again to refresh it.</p>
+
+  <p class="verdict $verdict_class">$verdict</p>
+  <div class="tiles">$tiles</div>
+
+  <h2>Brain</h2>
+  $brain_section
+
+  <h2>Nodes <span class="quiet">($node_count)</span></h2>
+  $nodes
+
+  <footer>Findings use the validator's own wording. This page is generated and
+    gitignored; never edit or commit it.</footer>
+</main>
+</body>
+</html>

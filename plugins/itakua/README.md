@@ -7,24 +7,28 @@ two skills with distinct triggers:
 - `itakua-map` defines normal operation: where material belongs, when work earns a node,
   approval boundaries, node creation, validation, and artifact indexing.
 - `itakua-setup` creates brains and repairs machine-local setup after a clone or move,
-  including Git identity, declared `_tmp/` folders, and `docs/drive` attachments.
+  including Git identity and `docs/drive` attachments.
 
 ## What it gives you
 
 - `itakua-setup/scripts/new-brain.sh` creates a brain with a `spaces/` content container,
   bindings table, Claude and Codex pointers, protective ignore rules, and a Git repository
   with no remote.
-- `itakua-map/scripts/new-node.sh` creates `notes/`, `log/`, and `_tmp/` for a node and
+- `itakua-map/scripts/new-node.sh` creates `notes/`, `log/`, and `inbox/` for a node and
   installs its README template without overwriting existing files.
 - `itakua-map/scripts/check-structure.py` validates nodes, local artifact reachability,
-  each linked node's declared Drive root, and the brain's declared Git bindings.
+  each linked node's declared Drive root, and the brain's declared Git bindings. It also
+  reports limbo, inbox counts, and the files that exist only on this machine; with
+  `--report` it writes the same as a static `status.html` page at the brain root.
 - `itakua-map/scripts/index-artifacts.py` generates an approved index of cloud artifacts,
   with Drive links for Google pointer files.
 - `itakua-setup/scripts/link-drive.sh` combines committed `drive-map` knowledge with
   machine-local cloud paths to recreate mapped `docs/drive` symlinks.
 
-The default safety contract is explicit: `_tmp/` is manual staging with no unattended
-processing; nothing there is deleted without owner approval. Agents need approval before
+The default safety contract is explicit: `inbox/` holds captured material that is not a
+source yet; text there is tracked, other files stay on the machine, nothing processes it
+unattended, and nothing is removed without owner approval. Any other folder inside a node
+is limbo, the owner's space, which agents leave alone. Agents need approval before
 editing `notes/` or creating/editing durable `docs/` content. Logs remain append-only raw
 evidence, with corrections added as new entries.
 
