@@ -2,7 +2,7 @@
 <!-- The template check-structure.py --report fills in. It lives in the skill so brains
      never carry a copy; a brain holds only the generated status.html, which is
      gitignored. Self-contained on purpose: no scripts, no fonts or files fetched, so it
-     opens offline from Finder or the Files app. -->
+     opens offline from Finder or the Files app. Colours are the itakua brand tokens. -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -11,18 +11,21 @@
 <title>$brain · brain status</title>
 <style>
   :root {
-    --ground:     #F1F3F5;
-    --surface:    #FFFFFF;
-    --ink:        #1C2530;
-    --muted:      #5C6B7A;
-    --line:       #D3DAE0;
-    --git:        #2F5D8C;
-    --bad:        #A3271F;
-    --bad-fill:   #FBEAE8;
-    --warn:       #855610;
-    --warn-fill:  #F7EEDC;
-    --ok:         #2B6543;
-    --ok-fill:    #E4F1E8;
+    --page:     #F3F0E8;
+    --surface:  #FBF9F4;
+    --field:    #E9E4D8;
+    --line:     #D3CBBB;
+    --ink:      #202923;
+    --muted:    #565F57;
+    --faint:    #736B5B;
+    --accent:   #646642;
+    --link:     #24546B;
+    --bad:      #9A2F22;
+    --bad-bg:   #F4DCD6;
+    --warn:     #7A4A12;
+    --warn-bg:  #F4E6CF;
+    --ok:       #3F5E2E;
+    --ok-bg:    #E2E8D2;
 
     --display: "Newsreader", Georgia, "Times New Roman", serif;
     --body: "Public Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -30,179 +33,176 @@
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --ground:     #14181C;
-      --surface:    #1B2026;
-      --ink:        #E3E8ED;
-      --muted:      #93A1AE;
-      --line:       #2C343C;
-      --git:        #7FA8D4;
-      --bad:        #F08A80;
-      --bad-fill:   #35201E;
-      --warn:       #D9A650;
-      --warn-fill:  #2B2418;
-      --ok:         #7CC79A;
-      --ok-fill:    #1A2D22;
+      --page:     #131A15;
+      --surface:  #1A211C;
+      --field:    #232C25;
+      --line:     #39453C;
+      --ink:      #ECEEE5;
+      --muted:    #A4AEA3;
+      --faint:    #8C978D;
+      --accent:   #C3C697;
+      --link:     #9CCFDD;
+      --bad:      #F0A090;
+      --bad-bg:   #3E231E;
+      --warn:     #F1C783;
+      --warn-bg:  #3C3425;
+      --ok:       #B5D39A;
+      --ok-bg:    #24301F;
     }
   }
 
   * { box-sizing: border-box; }
   body {
     margin: 0;
-    background: var(--ground);
+    background: var(--page);
     color: var(--ink);
     font-family: var(--body);
-    font-size: 15px;
-    line-height: 1.55;
+    font-size: 14px;
+    line-height: 1.45;
   }
-  .wrap { max-width: 960px; margin: 0 auto; padding: 40px 16px 64px; }
-  .eyebrow {
-    font-family: var(--mono);
+  .wrap { max-width: 1240px; margin: 0 auto; padding: 24px 16px 40px; }
+  h1, h2 { margin: 0; font-weight: 600; }
+  h1 { font-family: var(--display); font-size: 1.9rem; line-height: 1.1; overflow-wrap: anywhere; }
+  h2 {
     font-size: 0.72rem;
-    letter-spacing: 0.12em;
+    letter-spacing: 0.1em;
     text-transform: uppercase;
     color: var(--muted);
-    margin: 0 0 0.5rem;
-  }
-  h1, h2 { font-family: var(--display); font-weight: 600; line-height: 1.15; margin: 0; }
-  h1 { font-size: clamp(1.8rem, 5vw, 2.4rem); overflow-wrap: anywhere; }
-  h2 { font-size: 1.3rem; margin: 2.5rem 0 0.75rem; }
-  .meta { color: var(--muted); margin: 0.5rem 0 0; }
-  code, .mono { font-family: var(--mono); font-size: 0.9em; }
-
-  .verdict {
-    margin: 1.5rem 0 0;
-    padding: 0.75rem 1rem;
-    border-radius: 8px;
-    border: 1px solid currentColor;
-    font-weight: 600;
-  }
-  .verdict.ok  { color: var(--ok);  background: var(--ok-fill); }
-  .verdict.bad { color: var(--bad); background: var(--bad-fill); }
-
-  .tiles {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    gap: 10px;
-    margin-top: 1rem;
-  }
-  .tile {
-    background: var(--surface);
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    padding: 0.7rem 0.9rem;
-  }
-  .tile .num {
-    font-family: var(--display);
-    font-size: 1.9rem;
-    font-weight: 600;
-    line-height: 1.1;
-    font-variant-numeric: tabular-nums;
-  }
-  .tile .label { color: var(--muted); font-size: 0.82rem; }
-  .tile.bad .num  { color: var(--bad); }
-  .tile.warn .num { color: var(--warn); }
-  .tile.attn .num { color: var(--git); }
-
-  .card, .node {
-    background: var(--surface);
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    padding: 1rem 1.1rem;
-  }
-  .node { margin-top: 10px; margin-left: calc(var(--depth, 0) * 20px); }
-  .node h3 {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: 0.5rem;
     margin: 0 0 0.6rem;
-    font-size: 1rem;
-    font-weight: 600;
-    overflow-wrap: anywhere;
   }
-  .badge {
-    font-family: var(--body);
-    font-size: 0.75rem;
-    font-weight: 600;
-    padding: 0.05rem 0.55rem;
-    border-radius: 999px;
-  }
-  .b-problem { color: var(--bad);  background: var(--bad-fill); }
-  .b-warn    { color: var(--warn); background: var(--warn-fill); }
+  code, .mono { font-family: var(--mono); font-size: 0.88em; }
+  .quiet { color: var(--muted); }
+  .eyebrow { font-family: var(--mono); font-size: 0.7rem; letter-spacing: 0.12em;
+             text-transform: uppercase; color: var(--muted); margin: 0 0 0.25rem; }
 
-  dl.facts {
-    display: grid;
-    grid-template-columns: max-content 1fr;
-    gap: 0.25rem 1.25rem;
-    margin: 0;
-  }
+  /* header */
+  .top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between;
+         gap: 12px; margin-bottom: 16px; }
+  .meta { margin: 0.35rem 0 0; color: var(--muted); font-size: 0.85rem; }
+  .verdict { margin: 0; padding: 0.45rem 0.9rem; border-radius: 999px; font-weight: 600;
+             font-size: 0.85rem; border: 1px solid currentColor; }
+  .verdict.ok  { color: var(--ok);  background: var(--ok-bg); }
+  .verdict.bad { color: var(--bad); background: var(--bad-bg); }
+
+  /* counters */
+  .tiles { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 8px;
+           margin-bottom: 16px; }
+  .tile { background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
+          padding: 0.55rem 0.75rem; min-width: 0; }
+  .tile .num { font-family: var(--display); font-size: 1.6rem; font-weight: 600;
+               line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .tile .label { color: var(--muted); font-size: 0.76rem; overflow-wrap: anywhere; }
+  .tile.zero .num { color: var(--faint); }
+  .tile.bad  { border-color: var(--bad);  background: var(--bad-bg); }
+  .tile.bad .num  { color: var(--bad); }
+  .tile.warn { border-color: var(--warn); background: var(--warn-bg); }
+  .tile.warn .num { color: var(--warn); }
+  .tile.attn .num { color: var(--link); }
+
+  /* panels */
+  .grid { display: grid; grid-template-columns: minmax(0, 2.3fr) minmax(0, 1fr); gap: 16px;
+          align-items: start; }
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+           padding: 0.9rem 1rem; min-width: 0; }
+  .side { display: grid; gap: 16px; min-width: 0; }
+  .attention { margin-bottom: 16px; }
+
+  /* node table */
+  .scroll { overflow-x: auto; margin: 0 -1rem; padding: 0 1rem; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th, td { padding: 0.42rem 0.5rem; text-align: center; white-space: nowrap;
+           border-bottom: 1px solid var(--line); }
+  th { font-size: 0.72rem; font-weight: 600; color: var(--muted); }
+  th:first-child, td:first-child { text-align: left; }
+  tr:last-child td { border-bottom: 0; }
+  tbody tr:hover { background: var(--field); }
+  td.name { padding-left: calc(0.5rem + var(--depth, 0) * 1.25rem); }
+  td.name .mono { font-size: 0.92em; }
+  tr.top-node td.name .mono { font-weight: 600; }
+  .branch { color: var(--faint); margin-right: 0.3rem; }
+  .z { color: var(--faint); }
+  .n { color: var(--link); font-weight: 600; }
+  .chip { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.05rem 0.45rem;
+          border-radius: 999px; margin-left: 0.3rem; vertical-align: 1px; }
+  .c-bad  { color: var(--bad);  background: var(--bad-bg); }
+  .c-warn { color: var(--warn); background: var(--warn-bg); }
+  .c-ok   { color: var(--ok);   background: var(--ok-bg); }
+  .c-muted { color: var(--muted); background: var(--field); }
+  .footnote { margin: 0.6rem 0 0; font-size: 0.8rem; color: var(--muted); }
+
+  /* facts and findings */
+  dl.facts { display: grid; grid-template-columns: max-content 1fr; gap: 0.3rem 1rem; margin: 0; }
   dl.facts dt { color: var(--muted); }
   dl.facts dd { margin: 0; overflow-wrap: anywhere; }
-  .attn { color: var(--git); }
-  .quiet { color: var(--muted); }
-  details summary { cursor: pointer; }
-  details ul {
-    margin: 0.4rem 0 0;
-    padding-left: 1.1rem;
-    font-family: var(--mono);
-    font-size: 0.85em;
-  }
-
-  .findings {
-    list-style: none;
-    margin: 0.8rem 0 0;
-    padding: 0;
-    border-top: 1px solid var(--line);
-  }
-  .findings li {
-    display: flex;
-    gap: 0.75rem;
-    padding: 0.45rem 0;
-    border-bottom: 1px solid var(--line);
-    overflow-wrap: anywhere;
-  }
-  .findings li:last-child { border-bottom: 0; }
-  .findings .tag {
-    flex: none;
-    width: 4.5rem;
-    padding-top: 0.12rem;
-    font-family: var(--mono);
-    font-size: 0.72rem;
-    font-weight: 500;
-  }
+  .side dl.facts { grid-template-columns: 1fr; gap: 0; }
+  .side dl.facts dt { font-size: 0.76rem; }
+  .side dl.facts dd { margin-bottom: 0.55rem; }
+  .side dl.facts dd:last-child { margin-bottom: 0; }
+  .findings { list-style: none; margin: 0; padding: 0; }
+  .findings li { display: flex; gap: 0.6rem; padding: 0.4rem 0; border-top: 1px solid var(--line);
+                 overflow-wrap: anywhere; }
+  .findings li:first-child { border-top: 0; }
+  .findings .tag { flex: none; width: 3.6rem; padding-top: 0.1rem; font-family: var(--mono);
+                   font-size: 0.68rem; font-weight: 600; }
   .f-problem .tag { color: var(--bad); }
   .f-warn .tag    { color: var(--warn); }
-  .f-note .tag    { color: var(--muted); }
-  .card > .quiet, .node > .quiet { margin: 0.8rem 0 0; }
+  .f-note .tag    { color: var(--faint); }
+  .findings .at { font-family: var(--mono); font-size: 0.85em; color: var(--muted); }
+  .findings em { font-style: normal; font-family: var(--mono); font-size: 0.85em;
+                 color: var(--accent); }
+  details { margin-top: 0.25rem; }
+  details summary { cursor: pointer; color: var(--muted); font-size: 0.85em; }
+  details ul { margin: 0.3rem 0 0; padding-left: 1.1rem; font-family: var(--mono);
+               font-size: 0.8em; color: var(--muted); }
 
-  footer { margin-top: 3rem; color: var(--muted); font-size: 0.85rem; }
+  footer { margin-top: 20px; color: var(--muted); font-size: 0.8rem; }
 
+  @media (max-width: 1000px) {
+    .tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .grid { grid-template-columns: minmax(0, 1fr); }
+  }
   @media (max-width: 560px) {
+    .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     dl.facts { grid-template-columns: 1fr; gap: 0; }
-    dl.facts dd { margin-bottom: 0.45rem; }
-    .node { margin-left: calc(var(--depth, 0) * 8px); }
-    .findings li { flex-direction: column; gap: 0.1rem; }
+    dl.facts dd { margin-bottom: 0.4rem; }
   }
 </style>
 </head>
 <body>
 <main class="wrap">
-  <p class="eyebrow">Itakua · brain status</p>
-  <h1>$brain</h1>
-  <p class="meta">Generated $generated on <span class="mono">$host</span>. A snapshot:
-    run <code>check-structure.py --report</code> again to refresh it.</p>
+  <header class="top">
+    <div>
+      <p class="eyebrow">Itakua · brain status</p>
+      <h1>$brain</h1>
+      <p class="meta">Generated $generated on <span class="mono">$host</span></p>
+    </div>
+    <p class="verdict $verdict_class">$verdict</p>
+  </header>
 
-  <p class="verdict $verdict_class">$verdict</p>
   <div class="tiles">$tiles</div>
 
-  <h2>Brain</h2>
-  $brain_section
+  $attention
 
-  <h2>Nodes <span class="quiet">($node_count)</span></h2>
-  $nodes
+  <div class="grid">
+    <section class="panel">
+      <h2>Nodes <span class="quiet">($node_count)</span></h2>
+      $nodes
+    </section>
+    <div class="side">
+      <section class="panel">
+        <h2>Brain</h2>
+        $brain_section
+      </section>
+      <section class="panel">
+        <h2>Notes</h2>
+        $notes
+      </section>
+    </div>
+  </div>
 
-  <footer>Findings use the validator's own wording. This page is generated and
-    gitignored; never edit or commit it.</footer>
+  <footer>A snapshot: run <code>check-structure.py --report</code> again to refresh it.
+    Findings use the validator's own wording. This page is generated and gitignored;
+    never edit or commit it.</footer>
 </main>
 </body>
 </html>
