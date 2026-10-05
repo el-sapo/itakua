@@ -1,0 +1,27 @@
+/* itakua logo as live text. Needs Newsreader (variable, with the opsz axis) loaded.
+   The planet is placed from the font's own metrics, so the dot of the i reads as its moon.
+   Markup: <span class="itakua-logo">itakua</span> */
+.itakua-logo {
+  position: relative;
+  display: inline-block;
+  font-family: "Newsreader", Georgia, serif;
+  font-weight: 600;
+  font-optical-sizing: none;
+  font-variation-settings: "opsz" 32;
+  letter-spacing: -0.035em;
+  line-height: 1;
+  white-space: nowrap;
+  /* room for the planet, which reaches left of and above the text box */
+  margin-left: 0.4321em;
+  margin-top: 0.0756em;
+}
+.itakua-logo::before {
+  content: "";
+  position: absolute;
+  left: -0.4321em;
+  top: -0.0756em;
+  width: 0.4522em;
+  height: 0.4522em;
+  border-radius: 50%;
+  background: currentColor;
+}

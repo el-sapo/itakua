@@ -1,0 +1,48 @@
+/* itakua colour tokens. One set of components, two themes. Source: the brand identity note. */
+:root {
+  --itakua-page: #f3f0e8;
+  --itakua-surface: #e9e4d8;
+  --itakua-field: #e9e4d8;
+  --itakua-line: #d3cbbb;
+  --itakua-edge: #938a77;
+  --itakua-ink: #202923;
+  --itakua-muted: #565f57;
+  --itakua-accent: #646642;
+  --itakua-note-link: #24546b;
+  --itakua-doc-link: #8b4329;
+  --itakua-doc-link-bg: #f1dfd2;
+  --itakua-warning: #7a4a12;
+  --itakua-warning-bg: #f4e6cf;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --itakua-page: #131a15;
+    --itakua-surface: #1e2620;
+    --itakua-field: #232c25;
+    --itakua-line: #39453c;
+    --itakua-edge: #5f6d62;
+    --itakua-ink: #eceee5;
+    --itakua-muted: #a4aea3;
+    --itakua-accent: #c3c697;
+    --itakua-note-link: #9ccfdd;
+    --itakua-doc-link: #eebd8b;
+    --itakua-doc-link-bg: #3a2c21;
+    --itakua-warning: #f1c783;
+    --itakua-warning-bg: #3c3425;
+  }
+}
+:root[data-theme="dark"] {
+  --itakua-page: #131a15;
+  --itakua-surface: #1e2620;
+  --itakua-field: #232c25;
+  --itakua-line: #39453c;
+  --itakua-edge: #5f6d62;
+  --itakua-ink: #eceee5;
+  --itakua-muted: #a4aea3;
+  --itakua-accent: #c3c697;
+  --itakua-note-link: #9ccfdd;
+  --itakua-doc-link: #eebd8b;
+  --itakua-doc-link-bg: #3a2c21;
+  --itakua-warning: #f1c783;
+  --itakua-warning-bg: #3c3425;
+}
