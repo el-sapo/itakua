@@ -742,11 +742,127 @@ def brain_name():
     return pathlib.Path.cwd().name
 
 
-def findings_html(node):
-    rows = [f'<li class="f-{cls}"><span class="tag">{label}</span><span>{esc(msg)}</span></li>'
-            for cls, label, items in LEVELS for at, msg in items if at == node]
+def finding_li(cls, label, msg, at=None):
+    where = f'<span class="at">{esc(at)}/</span> ' if at and not msg.startswith(at) else ""
+    return (f'<li class="f-{cls}"><span class="tag">{label}</span>'
+            f'<span>{where}{esc(msg)}</span></li>')
+
+
+def attention_html():
+    """Problems and warnings, one by one, above everything else: they need acting on."""
+    rows = [finding_li(cls, label, msg, at)
+            for cls, label, items in LEVELS[:2] for at, msg in items]
+    if not rows:
+        return ""
+    return (f'<section class="panel attention"><h2>Needs attention</h2>'
+            f'<ul class="findings">{"".join(rows)}</ul></section>')
+
+
+def notes_html():
+    """Notes, with the ones that differ only in their node folded into one line.
+
+    Ten nodes with a legacy _tmp/ make ten notes that say the same thing; the page shows
+    the sentence once and lists the nodes under it.
+    """
+    groups = {}
+    for at, msg in notes:
+        shape = msg.replace(at, "\0", 1) if at and msg.startswith(at) else msg
+        groups.setdefault(shape, []).append((at, msg))
+    rows = []
+    for shape, items in groups.items():
+        if len(items) == 1:
+            rows.append(finding_li("note", "note", items[0][1]))
+            continue
+        text = esc(shape).replace("\0", "<em>&lt;node&gt;</em>")
+        listed = "".join(f"<li>{esc(at)}</li>" for at, _ in items)
+        rows.append(f'<li class="f-note"><span class="tag">note</span><span>{text}'
+                    f'<details><summary>{plural(len(items), "node")}</summary>'
+                    f'<ul>{listed}</ul></details></span></li>')
     return (f'<ul class="findings">{"".join(rows)}</ul>' if rows
             else '<p class="quiet">Nothing to report.</p>')
+
+
+def count_cell(value, name=None, attn=True, title=""):
+    """A number in a table cell: faint when zero, highlighted when it asks for work."""
+    data = f' data-count="{name}"' if name else ""
+    cls = "z" if not value else "n" if attn else ""
+    hover = f' title="{esc(title)}"' if title else ""
+    return f'<td{hover}><span class="{cls}"{data}>{value}</span></td>'
+
+
+def inbox_cells(info):
+    if info is None:
+        return '<td class="z">–</td><td class="z">–</td>'
+    cells = count_cell(info["count"], "inbox")
+    if not info["count"]:
+        return cells + '<td class="z">–</td>'
+    if "ages" in unchecked:
+        return cells + '<td class="quiet" title="oldest not checked: git failed">not checked</td>'
+    if info["days"] is None:
+        return cells + '<td class="z">–</td>'
+    oldest = info["oldest"].isoformat() if info["oldest"] else ""
+    return cells + f'<td title="{esc(oldest)}">{plural(info["days"], "day")}</td>'
+
+
+def local_cell(paths, in_git):
+    if not in_git or "local" in unchecked:
+        return '<td class="quiet">not checked</td>'
+    return count_cell(len(paths), "local", attn=False)
+
+
+DRIVE_CHIPS = {"linked": ("c-ok", "linked"), "unused docs/": ("c-muted", "unused")}
+
+
+def drive_cell(f):
+    drive = f.get("drive")
+    if not drive:
+        return '<td class="z">–</td>'
+    cls, word = DRIVE_CHIPS.get(drive, ("c-bad", drive))
+    title = f.get("drive_root") or f.get("artifacts") or ""
+    return (f'<td><span class="chip {cls}" title="{esc(title)}">{esc(word)}</span></td>')
+
+
+def node_row(node, in_git):
+    f = facts.get(node, {})
+    depth = max(node.count("/") - 1, 0)
+    leaf = node.rsplit("/", 1)[-1]
+    chips = ""
+    for cls, word, items in (("bad", "problem", problems), ("warn", "warning", warns)):
+        k = sum(1 for at, _ in items if at == node)
+        if k:
+            chips += f'<span class="chip c-{cls}">{plural(k, word)}</span>'
+    if f.get("legacy"):
+        chips += '<span class="chip c-muted" title="legacy _tmp/">_tmp</span>'
+    branch = '<span class="branch">└</span>' if depth else ""
+    undistilled = f.get("undistilled")
+    limbo = f.get("limbo", [])
+    return (f'<tr class="{"top-node" if not depth else "child"}" data-node="{esc(node)}" '
+            f'style="--depth: {depth}">'
+            f'<td class="name" title="{esc(node)}/">{branch}<span class="mono">{esc(leaf)}'
+            f'</span>{chips}</td>'
+            + inbox_cells(f.get("inbox"))
+            + ('<td class="z">–</td>' if undistilled is None else
+               count_cell(undistilled, "undistilled"))
+            + count_cell(len(limbo), attn=False, title=", ".join(limbo))
+            + local_cell(f.get("local_only", []), in_git)
+            + drive_cell(f)
+            + "</tr>")
+
+
+def nodes_html(found, in_git):
+    if not found:
+        return '<p class="quiet">No nodes yet.</p>'
+    rows = "".join(node_row(key(n), in_git) for n in sorted(found))
+    head = ("<tr><th>Node</th><th>Inbox</th><th>Oldest</th><th>Undistilled</th>"
+            "<th>Limbo</th><th>Local only</th><th>Drive</th></tr>")
+    notes = []
+    if "ages" in unchecked:
+        notes.append("Inbox ages: oldest not checked: git failed.")
+    if in_git and "local" in unchecked:
+        notes.append("Files only on this machine: not checked: git failed.")
+    foot = "".join(f'<p class="footnote">{n}</p>' for n in notes)
+    return (f'<div class="scroll"><table><thead>{head}</thead><tbody>{rows}</tbody>'
+            f'</table></div>{foot}')
 
 
 def inbox_html(info):
@@ -754,13 +870,13 @@ def inbox_html(info):
         return '<span class="quiet">no inbox</span>'
     if not info["count"]:
         return '<span data-count="inbox">0</span> <span class="quiet">items</span>'
-    age = (f' · oldest {info["oldest"].isoformat()} ({plural(info["days"], "day")})'
-           if info["oldest"] else "")
     if "ages" in unchecked:
         age = ' · <span class="quiet">oldest not checked: git failed</span>'
+    elif info["oldest"]:
+        age = esc(f' · oldest {info["oldest"].isoformat()} ({plural(info["days"], "day")})')
     else:
-        age = esc(age)
-    return f'<strong class="attn" data-count="inbox">{info["count"]}</strong> item(s){age}'
+        age = ""
+    return f'<strong class="n" data-count="inbox">{info["count"]}</strong> item(s){age}'
 
 
 def local_html(paths, in_git):
@@ -780,41 +896,7 @@ def facts_html(rows):
             "".join(f"<dt>{label}</dt><dd>{value}</dd>" for label, value in rows) + "</dl>")
 
 
-def node_html(node, in_git):
-    f = facts.get(node, {})
-    undistilled = f.get("undistilled")
-    drive = f.get("drive")
-    if drive == "linked" and f.get("drive_root"):
-        drive = f"linked → {f['drive_root']}"
-    artifacts = f.get("artifacts")
-    rows = [
-        ("Inbox", inbox_html(f.get("inbox"))),
-        ("Undistilled log entries",
-         '<span class="quiet">no log/</span>' if undistilled is None else
-         f'<strong class="{"attn" if undistilled else ""}" data-count="undistilled">'
-         f'{undistilled}</strong>'),
-        ("Limbo", esc(", ".join(f.get("limbo", []))) or '<span class="quiet">none</span>'),
-    ]
-    if f.get("legacy"):
-        rows.append(("Legacy _tmp/", esc(f["legacy"])))
-    rows += [
-        ("Only on this machine", local_html(f.get("local_only", []), in_git)),
-        ("docs/drive", esc(drive) if drive else '<span class="quiet">no docs/</span>'),
-        ("artifacts:", '<span class="quiet">not declared</span>' if artifacts is None else
-         esc(artifacts) or '<span class="quiet">unreadable</span>'),
-    ]
-    badges = ""
-    for cls, word, items in (("problem", "problem", problems), ("warn", "warning", warns)):
-        k = sum(1 for at, _ in items if at == node)
-        if k:
-            badges += f'<span class="badge b-{cls}">{plural(k, word)}</span>'
-    depth = max(node.count("/") - 1, 0)
-    return (f'<section class="node" data-node="{esc(node)}" style="--depth: {depth}">'
-            f'<h3><span class="mono">{esc(node)}/</span>{badges}</h3>'
-            f"{facts_html(rows)}{findings_html(node)}</section>")
-
-
-def brain_html(git_mode):
+def brain_html(found, git_mode):
     f = facts.get(None, {})
     if git_mode == "skipped":
         remote = identity = '<span class="quiet">not checked (--no-git)</span>'
@@ -827,8 +909,16 @@ def brain_html(git_mode):
         rows.append((f"{ROOT_INBOX}/", inbox_html(f.get("inbox"))))
     rows.append(("Outside any node, only on this machine",
                  local_html(f.get("local_only", []), git_mode == "used")))
-    return (f'<section class="card" data-node="(brain)">{facts_html(rows)}'
-            f"{findings_html(None)}</section>")
+    # Every node's machine-local files in one list: the table only counts them.
+    if git_mode == "used" and "local" not in unchecked:
+        spread = [p for n in sorted(found)
+                  for p in facts.get(key(n), {}).get("local_only", [])]
+        if spread:
+            items = "".join(f"<li>{esc(p)}</li>" for p in spread)
+            rows.append(("In nodes, only on this machine",
+                         f'<details><summary>{plural(len(spread), "file")}</summary>'
+                         f'<ul>{items}</ul></details>'))
+    return f'<div data-node="(brain)">{facts_html(rows)}</div>'
 
 
 def tiles_html(found, git_mode):
@@ -838,15 +928,14 @@ def tiles_html(found, git_mode):
     waiting = sum(i["count"] for i in inbox)
     undistilled = sum(f.get("undistilled", 0) for f in every)
     tiles = [
-        ("problems", len(problems), "Problems", "bad" if problems else ""),
-        ("warnings", len(warns), "Warnings", "warn" if warns else ""),
+        ("problems", len(problems), "Problems", "bad"),
+        ("warnings", len(warns), "Warnings", "warn"),
         ("notes", len(notes), "Notes", ""),
-        ("inbox", waiting, "Inbox items", "attn" if waiting else ""),
+        ("inbox", waiting, "Inbox items", "attn"),
         ("oldest", "–" if oldest is None else oldest,
          "Days the oldest has waited" + (" · not checked" if "ages" in unchecked else ""),
-         ""),
-        ("undistilled", undistilled, "Undistilled log entries",
-         "attn" if undistilled else ""),
+         "attn"),
+        ("undistilled", undistilled, "Undistilled log entries", "attn"),
         ("limbo", sum(len(f.get("limbo", [])) for f in every), "Limbo folders", ""),
     ]
     if git_mode == "used" and "local" not in unchecked:
@@ -854,9 +943,13 @@ def tiles_html(found, git_mode):
                       "Files only on this machine", ""))
     else:
         tiles.append(("local", "–", "Files only on this machine · not checked", ""))
-    return "".join(f'<div class="tile {cls}"><div class="num" data-total="{name}">{value}'
-                   f'</div><div class="label">{label}</div></div>'
-                   for name, value, label, cls in tiles)
+    out = []
+    for name, value, label, cls in tiles:
+        if not value or value == "–":
+            cls = "zero"
+        out.append(f'<div class="tile {cls}"><div class="num" data-total="{name}">{value}'
+                   f'</div><div class="label">{label}</div></div>')
+    return "".join(out)
 
 
 def write_report(found, git_mode, verdict):
@@ -866,7 +959,6 @@ def write_report(found, git_mode, verdict):
     except OSError as e:
         sys.exit(f"cannot read the status page template: {e}")
     now = datetime.datetime.now().astimezone()
-    nodes = "".join(node_html(key(n), git_mode == "used") for n in sorted(found))
     page = template.substitute(
         brain=esc(brain_name()),
         generated=esc(now.isoformat(sep=" ", timespec="minutes")),
@@ -874,9 +966,11 @@ def write_report(found, git_mode, verdict):
         verdict_class="bad" if problems else "ok",
         verdict=esc(verdict),
         tiles=tiles_html(found, git_mode),
-        brain_section=brain_html(git_mode),
+        attention=attention_html(),
+        nodes=nodes_html(found, git_mode == "used"),
         node_count=len(found),
-        nodes=nodes or '<p class="quiet">No nodes yet.</p>',
+        brain_section=brain_html(found, git_mode),
+        notes=notes_html(),
     )
     tmp = pathlib.Path(f".{REPORT}.tmp")
     try:

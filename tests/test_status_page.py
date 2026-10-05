@@ -73,7 +73,8 @@ class StatusPageTests(unittest.TestCase):
 
     @staticmethod
     def section(page, node):
-        m = re.search(r'<section [^>]*data-node="%s".*?</section>' % re.escape(node),
+        # A node is a table row; the brain as a whole is its own block.
+        m = re.search(r'<(tr|div) [^>]*data-node="%s".*?</\1>' % re.escape(node),
                       page, re.S)
         return m.group(0) if m else ""
 
@@ -196,6 +197,34 @@ class StatusPageTests(unittest.TestCase):
             self.assertIn("1 problem(s).", page)
             self.assertIn("spaces/stray/ is neither a slot nor a node", page)
 
+    def test_notes_that_differ_only_by_node_are_folded(self):
+        with tempfile.TemporaryDirectory() as temp:
+            brain = self.brain(temp)
+            for node in ("guitar", "work"):
+                write(brain / "spaces" / node / "_tmp" / "old.txt")
+
+            result = self.validate(brain, "--report")
+
+            self.assertEqual(result.stdout.count("is a legacy _tmp/"), 2)
+            page = self.page(brain)
+            self.assertEqual(page.count("is a legacy _tmp/"), 1)
+            self.assertIn("2 nodes", page)
+            for node in ("spaces/guitar", "spaces/work"):
+                self.assertIn(f"<li>{node}</li>", page)
+
+    def test_problems_lead_the_page_and_a_clean_brain_has_no_attention_panel(self):
+        with tempfile.TemporaryDirectory() as temp:
+            brain = self.brain(temp)
+
+            self.validate(brain, "--report")
+            self.assertNotIn("Needs attention", self.page(brain))
+
+            (brain / "spaces" / "stray").mkdir()
+            self.validate(brain, "--report")
+            page = self.page(brain)
+            attention = page.index("Needs attention")
+            self.assertLess(attention, page.index("spaces/stray/ is neither a slot nor a node"))
+            self.assertLess(attention, page.index("<table"))
 
 if __name__ == "__main__":
     unittest.main()
