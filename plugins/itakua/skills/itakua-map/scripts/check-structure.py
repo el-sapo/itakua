@@ -3,6 +3,7 @@
 
     python3 <itakua-map>/scripts/check-structure.py          # structure + git state
     python3 <itakua-map>/scripts/check-structure.py --no-git # structure only, no git calls
+    python3 <itakua-map>/scripts/check-structure.py --report # also write status.html
 
 A folder is either a SLOT (notes/ log/ docs/ inbox/) directly inside a node, something
 filed INSIDE a slot, or a CHILD NODE (it has its own README.md). Any other folder inside a
@@ -22,17 +23,52 @@ a work brain pushed to a personal account is not. Git also says what the tree ca
 which files exist only on this machine, which tracked files are large enough to weigh on
 history for good, and whether the .gitignore keeps binaries out of inbox/. --no-git
 skips every one of those queries.
+
+--report writes status.html at the brain root once the checks finish: the same findings,
+plus each node's inbox, undistilled log entries, limbo and machine-local files, as one
+static page from assets/status-page.html. Without it the validator writes nothing.
 """
-import os, sys, json, pathlib, re, subprocess, unicodedata, datetime
+import os, sys, json, pathlib, re, subprocess, unicodedata, datetime, html, platform
+import string
 
 SLOTS = ("notes", "log", "docs", "inbox")
 LEGACY = "_tmp"                  # the slot inbox/ replaced in 0.5.0
 REQUIRED = ("notes", "log")
+ROOT_INBOX = "00-inbox"
 LARGE = 1024 * 1024              # a tracked file in a slot above this gets a warning
+REPORT = "status.html"
+TEMPLATE = pathlib.Path(__file__).resolve().parent.parent / "assets" / "status-page.html"
+
+# Findings, each as (node, message): node is the NFC path of the node it is about, or None
+# for the brain as a whole. The text output and the status page both read these lists.
 problems, warns, notes = [], [], []
+# What the status page shows beside the findings, by node (None is the brain). Filled by
+# the same checks that print, so every number on the page is one the text output gave.
+facts = {}
 # Every directory under spaces/, NFC-keyed: container, node, slot, inslot, limbo, legacy
 # or orphan. Kept after the walk so later checks can tell slot content from limbo.
 status = {}
+
+
+def problem(msg, node=None):
+    problems.append((node, msg))
+
+
+def warn(msg, node=None):
+    warns.append((node, msg))
+
+
+def note(msg, node=None):
+    notes.append((node, msg))
+
+
+def key(node):
+    """How a node is named in findings and facts: its path, NFC, as a string."""
+    return nfc(str(node))
+
+
+def fact(node):
+    return facts.setdefault(node, {})
 
 
 # --- structure -------------------------------------------------------------------
@@ -51,44 +87,46 @@ def scan(root):
         dirnames[:] = sorted(d for d in dirnames if not d.startswith("."))
         if dirpath == str(root):
             continue
-        key, parent = nfc(dirpath), nfc(os.path.dirname(dirpath))
+        here, parent = nfc(dirpath), nfc(os.path.dirname(dirpath))
         base = os.path.basename(dirpath)
         pstat = status.get(parent, "container")
         rel = os.path.relpath(dirpath, ".")
 
         if pstat in ("slot", "inslot"):
-            status[key] = "inslot"
+            status[here] = "inslot"
         elif pstat in ("orphan", "legacy"):
-            status[key] = pstat                   # already reported at the top
+            status[here] = pstat                  # already reported at the top
         elif pstat == "limbo":
-            status[key] = "limbo"
-            limbo_top[key] = top = limbo_top[parent]
+            status[here] = "limbo"
+            limbo_top[here] = top = limbo_top[parent]
             if "README.md" in filenames:
-                warns.append(f"{rel}/ has a README.md but sits inside limbo {top}/, so it "
-                             f"is not validated as a node -- every folder above a node "
-                             f"must be a node too")
+                warn(f"{rel}/ has a README.md but sits inside limbo {top}/, so it is not "
+                     f"validated as a node -- every folder above a node must be a node "
+                     f"too", node=node_of(parent))
         elif base in SLOTS and pstat == "node":
-            status[key] = "slot"
+            status[here] = "slot"
         elif base == LEGACY and pstat == "node":
-            status[key] = "legacy"
-            notes.append(f"{rel}/ is a legacy _tmp/ -- not a slot since 0.5.0 and still "
-                         f"gitignored; move what should be filed into inbox/ by hand")
+            status[here] = "legacy"
+            fact(parent)["legacy"] = rel
+            note(f"{rel}/ is a legacy _tmp/ -- not a slot since 0.5.0 and still "
+                 f"gitignored; move what should be filed into inbox/ by hand", node=parent)
         elif "README.md" in filenames:
-            status[key] = "node"
+            status[here] = "node"
             found.append(pathlib.Path(dirpath))
         elif pstat == "node":
-            status[key] = "limbo"
-            limbo_top[key] = rel
-            notes.append(f"{rel}/ is limbo (neither a slot nor a child node) -- the "
-                         f"owner's; agents leave it alone")
+            status[here] = "limbo"
+            limbo_top[here] = rel
+            fact(parent).setdefault("limbo", []).append(rel)
+            note(f"{rel}/ is limbo (neither a slot nor a child node) -- the owner's; "
+                 f"agents leave it alone", node=parent)
         else:
-            status[key] = "orphan"
+            status[here] = "orphan"
             if base in SLOTS:
-                problems.append(f"{rel}/ is named like a slot but its parent is not a "
-                                f"node -- give the parent a README.md, or rename this")
+                problem(f"{rel}/ is named like a slot but its parent is not a node -- "
+                        f"give the parent a README.md, or rename this")
             else:
-                problems.append(f"{rel}/ is neither a slot nor a node (no README.md) -- "
-                                f"give it a README.md, or move it inside a node")
+                problem(f"{rel}/ is neither a slot nor a node (no README.md) -- give it "
+                        f"a README.md, or move it inside a node")
     return found
 
 
@@ -97,16 +135,24 @@ def check_nodes(found):
         readme = (n / "README.md").read_text(encoding="utf-8")
         for s in REQUIRED:
             if not (n / s).is_dir():
-                problems.append(f"{n}/ is missing required slot {s}/")
+                problem(f"{n}/ is missing required slot {s}/", node=key(n))
         for s in SLOTS:
             if (n / s).is_dir() and f"`{s}/`" not in readme:
-                problems.append(f"{n}/README.md does not list {s}/, which exists")
+                problem(f"{n}/README.md does not list {s}/, which exists", node=key(n))
             if not (n / s).is_dir() and f"`{s}/`" in readme \
                     and "*Unused" not in readme and "*Optional" not in readme:
-                notes.append(f"{n}/README.md mentions {s}/, which does not exist")
+                note(f"{n}/README.md mentions {s}/, which does not exist", node=key(n))
 
 
-# --- inbox -----------------------------------------------------------------------
+# --- inbox and log -----------------------------------------------------------------
+
+def inboxes(found):
+    """Every inbox to report on, as (node, path): each node's inbox/, then 00-inbox/."""
+    pairs = [(key(n), n / "inbox") for n in found if (n / "inbox").is_dir()]
+    if pathlib.Path(ROOT_INBOX).is_dir():
+        pairs.append((None, pathlib.Path(ROOT_INBOX)))
+    return pairs
+
 
 def inbox_items(inbox):
     """Every file captured in an inbox, at any depth. Dotfiles (.gitkeep) are not items."""
@@ -118,15 +164,15 @@ def inbox_items(inbox):
     return items
 
 
-def first_added(found):
+def first_added(pairs):
     """When git first saw each inbox file, by path: one `git log` over every inbox.
 
     A clone or checkout resets mtime, so on a fresh clone every tracked item would look
     like it arrived today. The commit that added it does not move.
     """
-    inboxes = [str(n / "inbox") for n in found if (n / "inbox").is_dir()]
+    paths = [str(path) for _, path in pairs]
     out = git_raw("log", "--diff-filter=A", "--relative", "-z", "--name-only",
-                  "--format=%x01%ct", "--", *inboxes) if inboxes else None
+                  "--format=%x01%ct", "--", *paths) if paths else None
     added, when = {}, None
     for token in (out or "").split("\0"):
         token = token.lstrip("\n")
@@ -137,16 +183,11 @@ def first_added(found):
     return added
 
 
-def check_inbox(found, added):
-    """One note per node with something in its inbox: how many, and since when."""
+def check_inbox(pairs, added):
+    """One note per inbox with something in it: how many, and since when."""
     today = datetime.date.today()
-    for n in found:
-        inbox = n / "inbox"
-        if not inbox.is_dir():
-            continue
+    for node, inbox in pairs:
         items = inbox_items(inbox)
-        if not items:
-            continue
         stamps = []
         for item in items:
             times = [added[k] for k in (nfc(item.as_posix()),) if k in added]
@@ -157,9 +198,39 @@ def check_inbox(found, added):
             if times:
                 stamps.append(min(times))
         oldest = datetime.date.fromtimestamp(min(stamps)) if stamps else None
-        age = (f", oldest {oldest.isoformat()} ({(today - oldest).days} day(s))"
-               if oldest else "")
-        notes.append(f"{inbox}/: {len(items)} item(s){age}")
+        days = (today - oldest).days if oldest else None
+        fact(node)["inbox"] = {"count": len(items), "oldest": oldest, "days": days}
+        if items:
+            age = f", oldest {oldest.isoformat()} ({days} day(s))" if oldest else ""
+            note(f"{inbox}/: {len(items)} item(s){age}", node=node)
+
+
+def check_distilled(found):
+    """Log entries nobody has looked at yet: no `distilled_into` anywhere in the file.
+
+    The same audit as `grep -rL --include='*.md' distilled_into log/`. `distilled_into: []`
+    means considered, nothing to lift, so only a missing field counts.
+    """
+    for n in found:
+        log = n / "log"
+        if not log.is_dir():
+            continue
+        pending = 0
+        for dirpath, dirnames, filenames in os.walk(log):
+            dirnames[:] = sorted(d for d in dirnames if not d.startswith("."))
+            for f in filenames:
+                if f.startswith(".") or not f.endswith(".md"):
+                    continue
+                try:
+                    text = pathlib.Path(dirpath, f).read_text(encoding="utf-8",
+                                                              errors="replace")
+                except OSError:
+                    continue
+                pending += "distilled_into" not in text
+        fact(key(n))["undistilled"] = pending
+        if pending:
+            note(f"{log}/: {pending} entr{'y' if pending == 1 else 'ies'} with no "
+                 f"distilled_into -- nobody has looked yet", node=key(n))
 
 
 # --- what git says about the tree --------------------------------------------------
@@ -175,12 +246,13 @@ def node_of(path):
 
 
 def check_local_only():
-    """Files under spaces/ that git ignores: they exist on this machine and nowhere else.
+    """Files git ignores under spaces/ and 00-inbox/: they exist on this machine only.
 
     docs/drive is excluded (the cloud holds it), and so are dotfiles and legacy _tmp/,
     which is already reported as a whole.
     """
-    out = git_raw("ls-files", "-z", "-o", "-i", "--exclude-standard", "--", "spaces")
+    out = git_raw("ls-files", "-z", "-o", "-i", "--exclude-standard", "--",
+                  "spaces", ROOT_INBOX)
     by_node = {}
     for path in (out or "").split("\0"):
         folder = os.path.dirname(path)
@@ -193,9 +265,12 @@ def check_local_only():
         by_node.setdefault(node_of(folder), []).append(path)
     for node, paths in sorted(by_node.items(), key=lambda kv: kv[0] or ""):
         shown = [os.path.relpath(p, node) if node else p for p in paths]
+        fact(node)["local_only"] = shown
         more = f", and {len(shown) - 5} more" if len(shown) > 5 else ""
-        notes.append(f"{node or 'spaces'}/: {len(paths)} file(s) only on this machine "
-                     f"(ignored by git, outside docs/drive): {', '.join(shown[:5])}{more}")
+        where = f"{node}/: {len(paths)} file(s)" if node else \
+            f"{len(paths)} file(s) outside any node"
+        note(f"{where} only on this machine (ignored by git, outside docs/drive): "
+             f"{', '.join(shown[:5])}{more}", node=node)
 
 
 def check_sizes():
@@ -209,21 +284,22 @@ def check_sizes():
         except OSError:
             continue
         if size > LARGE:
-            warns.append(f"{path} is {size / LARGE:.1f} MB and tracked by git -- history "
-                         f"keeps every version; move it to docs/drive unless it must be "
-                         f"versioned")
+            warn(f"{path} is {size / LARGE:.1f} MB and tracked by git -- history keeps "
+                 f"every version; move it to docs/drive unless it must be versioned",
+                 node=node_of(os.path.dirname(path)))
 
 
 def check_allowlist(found):
-    """Ask git whether a binary dropped in a real inbox would be ignored."""
-    inboxes = [n / "inbox" for n in found if (n / "inbox").is_dir()]
-    if not inboxes:
-        return
-    probe = (inboxes[0] / "capture.heic").as_posix()
-    if git("check-ignore", "-q", "--no-index", probe) is None:
-        warns.append(f".gitignore would commit binaries dropped in inbox/ ({probe} is not "
-                     f"ignored) -- add the inbox allowlist the itakua-map skill gives, so "
-                     f"only text is tracked there")
+    """Ask git whether a binary dropped in a real inbox, or in 00-inbox/, is ignored."""
+    probes = [n / "inbox" for n in found if (n / "inbox").is_dir()][:1]
+    if pathlib.Path(ROOT_INBOX).is_dir():
+        probes.append(pathlib.Path(ROOT_INBOX))
+    for inbox in probes:
+        probe = (inbox / "capture.heic").as_posix()
+        if git("check-ignore", "-q", "--no-index", probe) is None:
+            warn(f".gitignore would commit binaries dropped in {inbox.name}/ ({probe} is "
+                 f"not ignored) -- add the inbox allowlist the itakua-map skill gives, so "
+                 f"only text is tracked there")
 
 
 # --- artifact layer ---------------------------------------------------------------
@@ -253,34 +329,36 @@ def check_artifacts(found):
         index = docs / "index.md"
         drive = docs / "drive"
         has_index = os.path.lexists(str(index))
+        at = key(n)
 
         if drive.is_symlink():
             if not drive.exists():
+                fact(at)["drive"] = "dangling"
                 detail = f"; {index_claim(index)}" if has_index else ""
-                problems.append(
-                    f"{drive} is a dangling or unavailable symlink{detail} -- "
-                    "load itakua-setup to repair the local attachment"
-                )
+                problem(f"{drive} is a dangling or unavailable symlink{detail} -- "
+                        "load itakua-setup to repair the local attachment", node=at)
             elif not drive.is_dir():
-                problems.append(f"{drive} is a symlink but does not point to a directory")
+                fact(at)["drive"] = "not a directory"
+                problem(f"{drive} is a symlink but does not point to a directory", node=at)
+            else:
+                fact(at)["drive"] = "linked"
         elif os.path.lexists(str(drive)):
-            problems.append(f"{drive} exists but is not a symlink")
+            fact(at)["drive"] = "not a symlink"
+            problem(f"{drive} exists but is not a symlink", node=at)
         elif has_index:
+            fact(at)["drive"] = "absent"
             count = indexed_artifact_count(index)
             if count is None:
-                problems.append(
-                    f"{drive} is absent and {index} has no readable artifact count -- "
-                    "load itakua-setup to repair the local attachment"
-                )
+                problem(f"{drive} is absent and {index} has no readable artifact count -- "
+                        "load itakua-setup to repair the local attachment", node=at)
             elif count > 0:
-                problems.append(
-                    f"{drive} is absent but {index} records {count} artifact(s) -- "
-                    "load itakua-setup to repair the local attachment"
-                )
+                problem(f"{drive} is absent but {index} records {count} artifact(s) -- "
+                        "load itakua-setup to repair the local attachment", node=at)
             else:
-                notes.append(f"{index} records 0 artifacts; {drive} is absent")
+                note(f"{index} records 0 artifacts; {drive} is absent", node=at)
         elif docs.is_dir():
-            notes.append(f"{n}/ has an unused docs/ slot (no index or drive link)")
+            fact(at)["drive"] = "unused docs/"
+            note(f"{n}/ has an unused docs/ slot (no index or drive link)", node=at)
 
 
 # --- artifact store declaration ---------------------------------------------------
@@ -426,6 +504,9 @@ def check_artifact_store(found):
         declared = declared_artifacts(readme.read_text(encoding="utf-8"))
         drive = n / "docs" / "drive"
         root, source = mapped_root(n, drive)
+        at = key(n)
+        if root:
+            fact(at)["drive_root"] = root
 
         if declared is None:
             if drive.is_symlink():
@@ -433,31 +514,33 @@ def check_artifact_store(found):
                             f"`root: {yaml_scalar(root)}`" if root else
                             "; set `root` to the Drive folder docs/drive points to, as "
                             "Drive shows it")
-                warns.append(f"{n}/ has docs/drive but {readme} declares no `artifacts:` "
-                             f"key{proposal}. Adding it is a README edit: owner approval")
+                warn(f"{n}/ has docs/drive but {readme} declares no `artifacts:` "
+                     f"key{proposal}. Adding it is a README edit: owner approval", node=at)
             continue
 
         declared_root = nfc(declared.get("root") or "").strip("/")
         provider = declared.get("provider") or ""
+        fact(at)["artifacts"] = declared_root
         if not declared_root:
-            warns.append(f"{readme} has an `artifacts:` key with no readable `root` -- "
-                         f"use the two-line block form the itakua-map skill defines, "
-                         f"indented with spaces, quoting a value with `: ` or ` #` in it")
+            warn(f"{readme} has an `artifacts:` key with no readable `root` -- use the "
+                 f"two-line block form the itakua-map skill defines, indented with spaces, "
+                 f"quoting a value with `: ` or ` #` in it", node=at)
         elif "<" in declared_root or ">" in declared_root:
-            warns.append(f"{readme} `artifacts.root` is still a placeholder: {declared_root}")
+            warn(f"{readme} `artifacts.root` is still a placeholder: {declared_root}",
+                 node=at)
             declared_root = ""
         if provider not in PROVIDERS:
-            warns.append(f"{readme} `artifacts.provider` is {provider or 'missing'}; the "
-                         f"framework defines {', '.join(PROVIDERS)}")
+            warn(f"{readme} `artifacts.provider` is {provider or 'missing'}; the "
+                 f"framework defines {', '.join(PROVIDERS)}", node=at)
 
         if not os.path.lexists(str(drive)):
-            warns.append(f"{readme} declares `artifacts:` but {drive} is not linked on this "
-                         f"machine -- load itakua-setup to attach it, or drop the key if "
-                         f"the node keeps no artifacts in Drive")
+            warn(f"{readme} declares `artifacts:` but {drive} is not linked on this "
+                 f"machine -- load itakua-setup to attach it, or drop the key if the node "
+                 f"keeps no artifacts in Drive", node=at)
         elif root and declared_root and declared_root != root:
-            warns.append(f"{readme} declares `artifacts.root: {declared_root}`, but {source} "
-                         f"gives `root: {yaml_scalar(root)}` -- correct whichever is stale, "
-                         f"with owner approval")
+            warn(f"{readme} declares `artifacts.root: {declared_root}`, but {source} "
+                 f"gives `root: {yaml_scalar(root)}` -- correct whichever is stale, with "
+                 f"owner approval", node=at)
 
 
 # --- git state -------------------------------------------------------------------
@@ -503,7 +586,8 @@ def declared_bindings():
 
 def check_git():
     if git("rev-parse", "--git-dir") is None:
-        notes.append("not a git repository -- git bindings not checked")
+        fact(None)["git"] = "not a git repository"
+        note("not a git repository -- git bindings not checked")
         return
 
     declared = declared_bindings()
@@ -516,52 +600,214 @@ def check_git():
     decl_remote = declared.get("git remote", "")
     if remotes:
         urls = ", ".join(f"{r} -> {git('remote', 'get-url', r) or '?'}" for r in remotes)
+        fact(None)["remote"] = urls
         if re.search(r"\bnone\b", decl_remote, re.I) and "none yet" not in decl_remote.lower():
-            problems.append(
+            problem(
                 f"README declares NO REMOTE, and {len(remotes)} is configured: {urls} "
                 f"-- if this brain holds material that must not be published, this is "
                 f"the failure the declaration exists to prevent")
         else:
-            notes.append(f"remote(s): {urls}")
+            note(f"remote(s): {urls}")
     else:
-        notes.append("no remote configured")
+        fact(None)["remote"] = "none"
+        note("no remote configured")
+    fact(None)["identity"] = (f"{local_name or '?'} <{local_mail}>" if local_mail else
+                              f"not set here (global <{global_mail}>)" if global_mail else
+                              "not set")
 
     # --- identity ---
     if not local_mail:
         if global_mail:
-            problems.append(
+            problem(
                 f"no repository-local git identity -- commits here will be authored as "
                 f"the GLOBAL identity <{global_mail}>. Set one: "
                 f"git config --local user.email you@example.com; load itakua-setup to "
                 f"repair the machine-local binding")
         else:
-            problems.append(
+            problem(
                 "no git identity, local or global -- commits will fail or be authored "
                 "by a guess. Load itakua-setup and set a local one"
             )
     else:
         if global_mail and global_mail == local_mail:
-            notes.append(f"local identity <{local_mail}> is the same as the global one")
+            note(f"local identity <{local_mail}> is the same as the global one")
         m = re.search(r"([^<>|*]+?)\s*<([^<>@\s]+@[^<>@\s]+)>", declared.get("git identity", ""))
         if m:
             want_name, want_mail = m.group(1).strip(), m.group(2).strip()
             if want_mail != local_mail:
-                problems.append(f"README declares identity <{want_mail}>, repository is "
-                                f"configured as <{local_mail}> -- load itakua-setup to "
-                                f"repair the machine-local binding")
+                problem(f"README declares identity <{want_mail}>, repository is "
+                        f"configured as <{local_mail}> -- load itakua-setup to "
+                        f"repair the machine-local binding")
             elif want_name != (local_name or ""):
-                notes.append(f"README declares name '{want_name}', repository has "
-                             f"'{local_name}' -- load itakua-setup if the declared "
-                             f"identity should be restored")
+                note(f"README declares name '{want_name}', repository has "
+                     f"'{local_name}' -- load itakua-setup if the declared "
+                     f"identity should be restored")
             else:
-                notes.append(f"identity matches the README: {local_name} <{local_mail}>")
+                note(f"identity matches the README: {local_name} <{local_mail}>")
         else:
-            notes.append(f"identity: {local_name} <{local_mail}> (README declares none)")
+            note(f"identity: {local_name} <{local_mail}> (README declares none)")
 
     # --- the spine exists at all ---
     for f in ("README.md", ".gitignore"):
         if not pathlib.Path(f).is_file():
-            notes.append(f"no {f} at the repository root")
+            note(f"no {f} at the repository root")
+
+
+# --- status page -------------------------------------------------------------------
+
+LEVELS = (("problem", "PROBLEM", problems), ("warn", "WARN", warns), ("note", "note", notes))
+
+
+def esc(value):
+    return html.escape(str(value), quote=True)
+
+
+def plural(count, word):
+    return f"{count} {word}{'' if count == 1 else 's'}"
+
+
+def brain_name():
+    """The root README's title, or the folder name when it has none."""
+    try:
+        for line in pathlib.Path("README.md").read_text(encoding="utf-8").splitlines():
+            if line.startswith("# "):
+                return line[2:].strip()
+    except (OSError, UnicodeError):
+        pass
+    return pathlib.Path.cwd().name
+
+
+def findings_html(node):
+    rows = [f'<li class="f-{cls}"><span class="tag">{label}</span><span>{esc(msg)}</span></li>'
+            for cls, label, items in LEVELS for at, msg in items if at == node]
+    return (f'<ul class="findings">{"".join(rows)}</ul>' if rows
+            else '<p class="quiet">Nothing to report.</p>')
+
+
+def inbox_html(info):
+    if info is None:
+        return '<span class="quiet">no inbox</span>'
+    if not info["count"]:
+        return '<span data-count="inbox">0</span> <span class="quiet">items</span>'
+    age = (f' · oldest {info["oldest"].isoformat()} ({plural(info["days"], "day")})'
+           if info["oldest"] else "")
+    return f'<strong class="attn" data-count="inbox">{info["count"]}</strong> item(s){esc(age)}'
+
+
+def local_html(paths, in_git):
+    if not in_git:
+        return '<span class="quiet">not checked without git</span>'
+    if not paths:
+        return '<span data-count="local">0</span> <span class="quiet">files</span>'
+    items = "".join(f"<li>{esc(p)}</li>" for p in paths)
+    return (f'<details><summary><strong data-count="local">{len(paths)}</strong> '
+            f'file(s), ignored by git</summary><ul>{items}</ul></details>')
+
+
+def facts_html(rows):
+    return ('<dl class="facts">' +
+            "".join(f"<dt>{label}</dt><dd>{value}</dd>" for label, value in rows) + "</dl>")
+
+
+def node_html(node, in_git):
+    f = facts.get(node, {})
+    undistilled = f.get("undistilled")
+    drive = f.get("drive")
+    if drive == "linked" and f.get("drive_root"):
+        drive = f"linked → {f['drive_root']}"
+    artifacts = f.get("artifacts")
+    rows = [
+        ("Inbox", inbox_html(f.get("inbox"))),
+        ("Undistilled log entries",
+         '<span class="quiet">no log/</span>' if undistilled is None else
+         f'<strong class="{"attn" if undistilled else ""}" data-count="undistilled">'
+         f'{undistilled}</strong>'),
+        ("Limbo", esc(", ".join(f.get("limbo", []))) or '<span class="quiet">none</span>'),
+    ]
+    if f.get("legacy"):
+        rows.append(("Legacy _tmp/", esc(f["legacy"])))
+    rows += [
+        ("Only on this machine", local_html(f.get("local_only", []), in_git)),
+        ("docs/drive", esc(drive) if drive else '<span class="quiet">no docs/</span>'),
+        ("artifacts:", '<span class="quiet">not declared</span>' if artifacts is None else
+         esc(artifacts) or '<span class="quiet">unreadable</span>'),
+    ]
+    badges = ""
+    for cls, word, items in (("problem", "problem", problems), ("warn", "warning", warns)):
+        k = sum(1 for at, _ in items if at == node)
+        if k:
+            badges += f'<span class="badge b-{cls}">{plural(k, word)}</span>'
+    depth = max(node.count("/") - 1, 0)
+    return (f'<section class="node" data-node="{esc(node)}" style="--depth: {depth}">'
+            f'<h3><span class="mono">{esc(node)}/</span>{badges}</h3>'
+            f"{facts_html(rows)}{findings_html(node)}</section>")
+
+
+def brain_html(git_mode):
+    f = facts.get(None, {})
+    if git_mode == "skipped":
+        remote = identity = '<span class="quiet">not checked (--no-git)</span>'
+    elif f.get("git"):
+        remote = identity = esc(f["git"])
+    else:
+        remote, identity = esc(f.get("remote", "?")), esc(f.get("identity", "?"))
+    rows = [("Git remote", remote), ("Git identity", identity)]
+    if pathlib.Path(ROOT_INBOX).is_dir():
+        rows.append((f"{ROOT_INBOX}/", inbox_html(f.get("inbox"))))
+    rows.append(("Outside any node, only on this machine",
+                 local_html(f.get("local_only", []), git_mode == "used")))
+    return (f'<section class="card" data-node="(brain)">{facts_html(rows)}'
+            f"{findings_html(None)}</section>")
+
+
+def tiles_html(found):
+    every = [facts.get(key(n), {}) for n in found] + [facts.get(None, {})]
+    inbox = [f["inbox"] for f in every if f.get("inbox")]
+    oldest = max((i["days"] for i in inbox if i["days"] is not None), default=None)
+    waiting = sum(i["count"] for i in inbox)
+    undistilled = sum(f.get("undistilled", 0) for f in every)
+    tiles = [
+        ("problems", len(problems), "Problems", "bad" if problems else ""),
+        ("warnings", len(warns), "Warnings", "warn" if warns else ""),
+        ("notes", len(notes), "Notes", ""),
+        ("inbox", waiting, "Inbox items", "attn" if waiting else ""),
+        ("oldest", "–" if oldest is None else oldest, "Days the oldest has waited", ""),
+        ("undistilled", undistilled, "Undistilled log entries",
+         "attn" if undistilled else ""),
+        ("limbo", sum(len(f.get("limbo", [])) for f in every), "Limbo folders", ""),
+        ("local", sum(len(f.get("local_only", [])) for f in every),
+         "Files only on this machine", ""),
+    ]
+    return "".join(f'<div class="tile {cls}"><div class="num" data-total="{name}">{value}'
+                   f'</div><div class="label">{label}</div></div>'
+                   for name, value, label, cls in tiles)
+
+
+def write_report(found, git_mode, verdict):
+    """Render the status page from this run's findings and facts, then swap it in."""
+    try:
+        template = string.Template(TEMPLATE.read_text(encoding="utf-8"))
+    except OSError as e:
+        sys.exit(f"cannot read the status page template: {e}")
+    now = datetime.datetime.now().astimezone()
+    nodes = "".join(node_html(key(n), git_mode == "used") for n in sorted(found))
+    page = template.substitute(
+        brain=esc(brain_name()),
+        generated=esc(now.isoformat(sep=" ", timespec="minutes")),
+        host=esc(platform.node() or "an unnamed machine"),
+        verdict_class="bad" if problems else "ok",
+        verdict=esc(verdict),
+        tiles=tiles_html(found),
+        brain_section=brain_html(git_mode),
+        node_count=len(found),
+        nodes=nodes or '<p class="quiet">No nodes yet.</p>',
+    )
+    tmp = pathlib.Path(f".{REPORT}.tmp")
+    try:
+        tmp.write_text(page, encoding="utf-8")
+        os.replace(tmp, REPORT)
+    except OSError as e:
+        sys.exit(f"cannot write {REPORT}: {e}")
 
 
 # --- main ------------------------------------------------------------------------
@@ -569,8 +815,8 @@ def check_git():
 def main():
     args = sys.argv[1:]
     for a in args:
-        if a not in ("--git", "--no-git"):
-            sys.exit(f"usage: check-structure.py [--no-git]\nunknown option {a}")
+        if a not in ("--git", "--no-git", "--report"):
+            sys.exit(f"usage: check-structure.py [--no-git] [--report]\nunknown option {a}")
 
     root = pathlib.Path("spaces")
     if not root.is_dir():
@@ -578,13 +824,15 @@ def main():
                  "root; it is where all content lives")
 
     if pathlib.Path("areas").exists():
-        problems.append("legacy areas/ exists beside spaces/ -- new Itakua brains use only "
-                        "spaces/. Do not migrate an existing brain without owner approval")
+        problem("legacy areas/ exists beside spaces/ -- new Itakua brains use only "
+                "spaces/. Do not migrate an existing brain without owner approval")
 
     in_git = "--no-git" not in args and git("rev-parse", "--git-dir") is not None
     found = scan(root)
     check_nodes(found)
-    check_inbox(found, first_added(found) if in_git else {})
+    pairs = inboxes(found)
+    check_inbox(pairs, first_added(pairs) if in_git else {})
+    check_distilled(found)
     check_artifacts(found)
     check_artifact_store(found)
     if in_git:
@@ -593,17 +841,25 @@ def main():
         check_allowlist(found)
     if "--no-git" not in args:
         check_git()
+    if "--report" in args and in_git and git("check-ignore", "-q", REPORT) is None:
+        warn(f"{REPORT} is not gitignored -- add /{REPORT} to .gitignore; the page is "
+             f"regenerated per machine and is never committed")
 
     print(f"{len(found)} nodes checked: " + ", ".join(str(n) for n in sorted(found)))
-    for m in notes:
+    for _, m in notes:
         print(f"  note     {m}")
-    for m in warns:
+    for _, m in warns:
         print(f"  WARN     {m}")
-    for m in problems:
+    for _, m in problems:
         print(f"  PROBLEM  {m}")
     tail = f" {len(warns)} warning(s)." if warns else ""
-    print("\nOK -- structure and bindings are consistent." + tail if not problems
-          else f"\n{len(problems)} problem(s).{tail}")
+    verdict = ("OK -- structure and bindings are consistent." + tail if not problems
+               else f"{len(problems)} problem(s).{tail}")
+    print("\n" + verdict)
+    if "--report" in args:
+        write_report(found, "skipped" if "--no-git" in args else
+                     "used" if in_git else "unavailable", verdict)
+        print(f"wrote {REPORT}")
     return 1 if problems else 0
 
 

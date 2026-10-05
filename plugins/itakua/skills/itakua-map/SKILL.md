@@ -292,6 +292,7 @@ there is short and fixed:
 | `CLAUDE.md` / `AGENTS.md` | Three-line pointers to `README.md`. Pointers, never copies |
 | `drive-map` | Optional committed mapping from node paths to artifact paths relative to the cloud root |
 | `.drive-map.local` | Optional gitignored absolute overrides for this machine only |
+| `status.html` | Optional, gitignored. The brain status page `check-structure.py --report` writes; generated per machine, never edited or committed |
 | `.gitignore` | |
 
 Anything else at the root is drift. `check-structure.py` only walks `spaces/`, so nothing
@@ -309,8 +310,9 @@ machine. A capture may carry its destination in front matter, as the capture for
 defines.
 
 Two limits, stated rather than implied: **nothing empties it on a schedule**, and
-`check-structure.py` does not look at it. If a brain has no `00-inbox/`, do not create one
-to park something you have not worked out where to put. Work out where to put it.
+`check-structure.py` only counts it — items and the oldest one, as for a node's inbox — and
+never files anything out of it. If a brain has no `00-inbox/`, do not create one to park
+something you have not worked out where to put. Work out where to put it.
 
 ## Creating a node
 
@@ -477,10 +479,11 @@ context, that is the moment to build one — not before.
 - **A `log/` entry that produced knowledge says so.** `distilled_into:` lists the notes
   it fed. It is the link from event to knowledge, but the reason it earns its line is the
   empty case: **`distilled_into: []` means considered, nothing to lift**, while a *missing*
-  field means nobody has looked yet. So `grep -L distilled_into log/*.md` is the whole
-  distillation audit — undistilled material announces itself instead of waiting for
-  someone to read every entry and notice. Anything deliberately left for later goes in the
-  entry's own body, with the reason.
+  field means nobody has looked yet. So `grep -rL --include='*.md' distilled_into log/` is
+  the whole distillation audit, and `check-structure.py` runs it for every node —
+  undistilled material announces itself instead of waiting for someone to read every entry
+  and notice. Anything deliberately left for later goes in the entry's own body, with the
+  reason.
 - **Nothing writes to `notes/` unattended.** A scheduled or automated pass may read
   anything. It may append a `log/` entry only when an owner-approved contract says so,
   and it never processes `inbox/` or touches limbo by default. Every
@@ -505,7 +508,7 @@ context, that is the moment to build one — not before.
 | Script | Does |
 |---|---|
 | `new-node.sh` | Safely scaffolds a node with `notes/`, `log/`, `inbox/`, and the README template, without overwriting existing files |
-| `check-structure.py` | Validates every node and its local artifact attachment, warns when a linked node's README lacks the `artifacts:` key, declares it without a link, or names a `root` this machine's mapping contradicts (proposing the `root` from that mapping), **and** checks the repository's git state — remote, identity — against the bindings declared in the root README. Notes limbo folders, a leftover `_tmp/`, each node's inbox count and oldest item, and the files that exist only on this machine; warns on tracked files over 1 MB in a slot and on a `.gitignore` that would commit inbox binaries. `--no-git` skips every git query. Run after any restructure, and after anything that touches git |
+| `check-structure.py` | Validates every node and its local artifact attachment, warns when a linked node's README lacks the `artifacts:` key, declares it without a link, or names a `root` this machine's mapping contradicts (proposing the `root` from that mapping), **and** checks the repository's git state — remote, identity — against the bindings declared in the root README. Notes limbo folders, a leftover `_tmp/`, each node's inbox count and oldest item, and the files that exist only on this machine; warns on tracked files over 1 MB in a slot and on a `.gitignore` that would commit inbox binaries. `--no-git` skips every git query. `--report` also writes `status.html` at the brain root: the same findings and counts per node, as one static page that opens offline; without it the validator writes nothing. Run after any restructure, and after anything that touches git |
 | `index-artifacts.py` | Regenerates a node's `docs/index.md` from its cloud folder, in the node's own language. Flags orphans and cloud-pointer files that cannot be read on disk. Its Link column gives each Google pointer file its Drive URL; other files' cells stay empty rather than guessed |
 
 These scripts live under this skill's `scripts/` directory. Resolve that directory for the

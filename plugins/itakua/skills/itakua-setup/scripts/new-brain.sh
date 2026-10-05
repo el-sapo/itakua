@@ -143,6 +143,8 @@ write_file "$DEST/.gitignore" <<'EOF'
 _tmp/
 .drive-map.local
 *.skill
+# generated per machine by check-structure.py --report; never committed
+/status.html
 EOF
 
 write_file "$DEST/drive-map" <<'EOF'
