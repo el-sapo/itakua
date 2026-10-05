@@ -1,6 +1,6 @@
 ---
 name: itakua-setup
-description: Create, bootstrap, repair, or migrate the machine-local setup of an Itakua brain. Use when creating or cloning a brain; bringing a fresh or moved checkout into working order; diagnosing Git authentication, sandbox permission, or repository configuration failures; fixing missing, dangling, or unavailable docs/drive attachments; resolving absent or mismatched repository-local Git identity; restoring a README-declared _tmp/ folder; or configuring portable and local artifact mappings.
+description: Create, bootstrap, repair, or migrate the machine-local setup of an Itakua brain. Use when creating or cloning a brain; bringing a fresh or moved checkout into working order; diagnosing Git authentication, sandbox permission, or repository configuration failures; fixing missing, dangling, or unavailable docs/drive attachments; resolving absent or mismatched repository-local Git identity; or configuring portable and local artifact mappings.
 ---
 
 # Set up an Itakua brain
@@ -47,11 +47,9 @@ Run these checks from the brain root:
 3. Compare the README's Git identity binding with repository-local `user.name` and
    `user.email`. Set only `--local` values. If the README does not declare the intended
    identity, ask the owner rather than borrowing the global identity.
-4. Restore `_tmp/` only for nodes whose README declares it and where the directory is
-   missing. Its contents remain local and its declared contract still applies.
-5. If an indexed artifact layer is absent or dangling, inspect `drive-map` and
+4. If an indexed artifact layer is absent or dangling, inspect `drive-map` and
    `.drive-map.local`, make the cloud folders available offline, and run the linker.
-6. Run the map validator again. Report unresolved mappings or unavailable storage as
+5. Run the map validator again. Report unresolved mappings or unavailable storage as
    explicit setup gaps; do not invent targets.
 
 ## Diagnose clone and Git failures

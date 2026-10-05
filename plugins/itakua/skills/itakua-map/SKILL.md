@@ -1,6 +1,6 @@
 ---
 name: itakua-map
-description: The foundational map for operating an Itakua knowledge base built on spaces, nested nodes, four slots (notes/ log/ docs/ _tmp/), and per-node READMEs. Load this before reading, writing, filing, or creating anything inside an Itakua brain or a folder whose README says it is a node. It defines where files go, when work earns a node, how content migrates, and which actions require owner approval.
+description: The foundational map for operating an Itakua knowledge base built on spaces, nested nodes, four slots (notes/ log/ docs/ inbox/), and per-node READMEs. Load this before reading, writing, filing, or creating anything inside an Itakua brain or a folder whose README says it is a node. It defines where files go, when work earns a node, how content migrates, and which actions require owner approval.
 ---
 
 # Operating an Itakua brain
@@ -15,7 +15,7 @@ per-node, not globally. This skill tells you how the system works; the node's RE
 you what *that* node is and what its own slots hold.
 
 If the brain is being created, has just been cloned or moved, or reports a missing local
-attachment, Git identity, or declared `_tmp/`, load `itakua-setup` after this map. That
+attachment or Git identity, load `itakua-setup` after this map. That
 skill owns machine setup and repair; return here for normal operation.
 
 ## Nodes
@@ -42,29 +42,48 @@ containment*, and a nested node is free to run forever.
 ```
 <node>/
 ├── README.md   what this node is
-├── notes/      what I know        → git, mutable with owner approval
-├── log/        what happened      → git, append-only raw evidence
-├── docs/       artifacts          → cloud storage, durable writes need approval
-└── _tmp/       manual staging     → neither, never processed automatically
+├── notes/      what I know            → git, mutable with owner approval
+├── log/        what happened          → git, append-only raw evidence
+├── docs/       artifacts              → cloud storage, durable writes need approval
+└── inbox/      captured, not filed    → git (text only); nothing here is a source
 ```
 
 **A folder is either a slot (the four above) or a child node (it has a `README.md`).
-Anything else is temporary.** That one rule is what stops this sprawling:
+Anything else is limbo** (see **Limbo** below). That one rule is what stops this
+sprawling:
 
 - **Subfolders inside a slot are just filing.** `notes/discovery/` needs no explanation —
   it is obviously notes. The taxonomy is the four slots; organising within them is free
   and silent. Do not give a subfolder a README to "explain" it.
-- **Files in neither git nor cloud are a category, not a bug** — that is `_tmp/` doing
-  its job.
-- **Portable core, machine-local edges.** `notes/`, `log/`, the READMEs and `drive-map`
-  travel with the clone. `docs/drive` symlinks and `_tmp/` staging are per-machine. The
-  validator makes a missing artifact attachment visible; the cloud data itself is not lost.
-  A README's `artifacts:` key travels too: it is how readers that cannot follow the
-  symlink learn where `docs/` lives in Drive (see **Frontmatter**).
+- **Files that exist only on this machine are a category, not a bug.** A binary waiting
+  in `inbox/` is one: git ignores it and the cloud does not hold it. The validator lists
+  every such file so none of them is lost by surprise.
+- **Portable core, machine-local edges.** `notes/`, `log/`, the text in `inbox/`, the
+  READMEs and `drive-map` travel with the clone. `docs/drive` symlinks and the binaries
+  in `inbox/` are per-machine. The validator makes a missing artifact attachment visible;
+  the cloud data itself is not lost. A README's `artifacts:` key travels too: it is how
+  readers that cannot follow the symlink learn where `docs/` lives in Drive (see
+  **Frontmatter**).
 
-`notes/` and `log/` are required. New nodes also create `_tmp/` with the safe manual
-contract below; existing or deliberately minimal nodes may omit it. `docs/` is optional.
-A README lists only the slots the node actually has.
+`notes/` and `log/` are required. New nodes also create `inbox/`; existing or
+deliberately minimal nodes may omit it. `docs/` is optional. A README lists only the
+slots the node actually has.
+
+### Limbo
+
+Any folder inside a node that is neither a slot nor a child node is **limbo**. It is the
+owner's playground: whatever they cannot or do not want to classify yet.
+
+- Agents never create, move, tidy or delete anything in limbo, and never treat it as a
+  source unless the owner points at it.
+- Agents never stage it. **In a brain, stage by path, never `git add -A`** — whether
+  limbo gets committed is the owner's call.
+- `check-structure.py` reports a limbo folder as a note, never a failure. A `README.md`
+  inside limbo gets a warning: a node must sit directly in a node, so that one is not
+  validated.
+
+Limbo exists only inside a node. A folder directly under `spaces/` without a README is
+still a node missing its README, and the validator fails it.
 
 ## Where does this file go? — two questions
 
@@ -78,7 +97,7 @@ A README lists only the slots the node actually has.
    a dated thing that happened ............. log/
    something I know ........................ notes/
    a binary artifact ....................... docs/
-   staged for a person to review ........... _tmp/
+   captured, not yet distilled ............. inbox/
 ```
 
 Question 1 is the one that goes wrong. **A parent's slots are not leftovers and not a
@@ -190,36 +209,75 @@ mark what stays genuinely unclear rather than guessing.
 An empty `log/` is an **invitation, not waste**. Without one, a dated entry has nowhere
 obvious to go, lands in `notes/`, and corrupts the one distinction the spine rests on.
 
-## Contracts — only for `_tmp/`
+## `inbox/` — captured, not filed
 
-`_tmp/` is the single place where a file's meaning is *not* fixed by the slot it sits in,
-so it is the single place needing a declaration. Everywhere else the slot already says
-what a file is.
+`inbox/` is where anything meant for this node waits to be distilled: a file the owner
+wants to add, a clipped page, a dictated note, a note typed on the fly. Capture tools
+write here, so every node has a predictable place to receive material.
 
-A contract answers five things, and lives in the node's README:
+- **Nothing in `inbox/` is a source.** It is unreviewed. `notes/` never cites it, and a
+  claim distilled from it cites the `log/` entry the distilling produced.
+- **Anyone may add. Nothing processes it unattended.** Removing an item needs owner
+  approval.
+- **Subfolders are allowed** and follow the same rules.
 
-```markdown
-### `_tmp/` — manual staging
+It is the one slot whose contents have no fixed meaning yet, so it is the one slot with a
+contract. The default lives here, not in each README:
 
-- **Trigger:** the owner explicitly asks an agent to inspect a staged item.
+- **Trigger:** the owner explicitly asks an agent to work on an inbox item.
 - **Action:** do only the requested processing; otherwise leave the folder untouched.
-- **Output:** propose a destination and request approval before writing durable output.
-- **Disposition:** keep the source unless the owner approves its exact deletion.
-- **Mode:** manual/on request. Scheduled and unattended passes do not touch this folder.
+- **Output:** the distill flow below; durable output only with owner approval.
+- **Disposition:** keep the item unless the owner approves its exact removal.
+- **Mode:** manual, on request. Scheduled and unattended passes do not touch it.
+
+A node README declares an inbox contract only to narrow it for a subfolder (a
+transcription drop, say) or to allow a non-manual mode. Both need owner approval, and
+silence never grants automation or removal rights.
+
+### Distilling out of the inbox
+
+On request only:
+
+1. **Confirm the node.** An item in a node's inbox may still generalise to the parent or
+   belong to a child; ask the two filing questions again.
+2. **Write the dated `log/` entry.** Keep the raw in `log/` only if it passes the
+   accountability or re-interpretation test (see **How much raw to keep**); otherwise a
+   thin entry.
+3. **Propose the `notes/` changes** and wait for approval.
+4. **Set `distilled_into`** on the log entry.
+5. **Ask before removing the inbox copy.**
+
+### Binaries in the inbox
+
+**Text is tracked, binaries are not.** The brain's `.gitignore` uses an allowlist inside
+every `inbox/`: `.md`, `.txt`, `.html` and `.gitkeep` are tracked, every other file stays
+on this machine. An allowlist, because an inbox accepts any file, and no denylist keeps up
+with `.heic`, `.webp`, `.epub` and whatever comes next.
+
+```gitignore
+**/inbox/**
+!**/inbox/**/
+!**/inbox/**/*.md
+!**/inbox/**/*.txt
+!**/inbox/**/*.html
+!**/inbox/**/.gitkeep
 ```
 
-This is a procedure **declared at the point of use**: a transcription skill knows *how*;
-the README says *where, what to produce, and what to do with the original*.
+`new-brain.sh` writes this block, plus the same for `/00-inbox/`. A brain that predates it
+gets the block added by hand; the validator warns when a binary in an inbox would be
+committed.
 
-This is the default contract for every newly scaffolded node. A node may add narrower
-subfolder contracts, but silence never grants automation or deletion rights.
+When distilling a binary, tell the owner it exists only on this machine and recommend
+moving it to `docs/drive`. That is the expected workflow. Committing it with
+`git add -f` stays possible as an explicit owner override, and it is one of the cases
+that get a second ask (see **When the user overrides a rule**): history is permanent.
 
-Two cautions:
+### Legacy `_tmp/`
 
-- **Deletion must be explicit and human-confirmed by default.** A contract that deletes
-  sources is one bug away from destroying the only copy.
-- **State whether an unattended pass may act.** The safe default is always
-  `Mode: manual/on request`; changing it requires explicit owner approval.
+Before 0.5.0 the fourth slot was `_tmp/`, gitignored manual staging. It is not renamed.
+`_tmp/` stays in `.gitignore`, so nothing sitting there is committed by accident;
+`inbox/` starts empty and the owner moves items across by hand. The validator reports a
+leftover `_tmp/` as a legacy note and no longer asks for its contract.
 
 ## The repository root
 
@@ -242,10 +300,13 @@ it belongs in a node, which is what the two filing questions are for.
 
 ### `00-inbox/`
 
-Capture now, file later. It takes anything, in any shape, and **it is not a slot**: it has
-no meaning of its own, nothing is a source while it sits there, and nothing may live there
-permanently. Filing out of it means answering the two questions and moving the file into a
-node.
+Capture now, file later — for material that has no node yet. It takes anything, in any
+shape, and **it is not a slot**: it has no meaning of its own, nothing is a source while it
+sits there, and nothing may live there permanently. Filing out of it means answering the
+two questions and moving the file into a node. It keeps text the way `inbox/` does: the
+same allowlist tracks `.md`, `.txt` and `.html`, and leaves every other file on this
+machine. A capture may carry its destination in front matter, as the capture format
+defines.
 
 Two limits, stated rather than implied: **nothing empties it on a schedule**, and
 `check-structure.py` does not look at it. If a brain has no `00-inbox/`, do not create one
@@ -255,7 +316,9 @@ to park something you have not worked out where to put. Work out where to put it
 
 **Naming:** lowercase, kebab-case if multi-word. **Name it what the owner actually calls
 it** — in whichever language they think of it. Repos are often deliberately mixed; the
-node name follows the work, as the content does.
+node name follows the work, as the content does. Do not name a node, or a filing
+subfolder, `inbox`: git cannot tell it from the slot, so the inbox allowlist would leave
+anything but text in it untracked.
 
 **Language of what you write:** match the node. If a node's existing notes and logs are in
 Spanish, write Spanish; if English, English. Read one existing file before writing your
@@ -270,7 +333,7 @@ asked once per node, and worth asking because every later file matches the first
 **A new top-level node:**
 
 1. Run `new-node.sh spaces/<name>` or copy the whole template directory bundled here at
-   `assets/template/` to the new path. This creates `notes/`, `log/`, and `_tmp/` by
+   `assets/template/` to the new path. This creates `notes/`, `log/`, and `inbox/` by
    default.
 2. With owner approval, fill every `<placeholder>` in its durable `README.md`. Leave the
    commented `artifacts:` key commented until the node's `docs/drive` is linked.
@@ -285,7 +348,7 @@ asked once per node, and worth asking because every later file matches the first
 
 1. Confirm it earns a node — **own dated stream?** If not, make it a subfolder in the
    parent's `notes/`.
-2. Scaffold the template at `<parent>/<name>`; it includes `notes/`, `log/`, and `_tmp/`.
+2. Scaffold the template at `<parent>/<name>`; it includes `notes/`, `log/`, and `inbox/`.
 3. With owner approval, fill in its README.
 4. **Re-sort the parent.** After owner approval, move anything in the parent that is only about this child into
    it.
@@ -398,7 +461,11 @@ context, that is the moment to build one — not before.
 
 ## Standing rules
 
-- **Never commit binaries** (audio, PDF, images, video) — they belong in `docs/`.
+- **Never commit binaries** (audio, PDF, images, video) — they belong in `docs/`. A
+  binary in `inbox/` stays local until it moves there; `git add -f` is an owner override
+  that gets a second ask.
+- **Stage by path, never `git add -A`.** Limbo, and anything else the owner has not
+  decided to commit, stays out of the index unless they say otherwise.
 - **Durable writes need owner approval.** Creating or editing `README.md`, `notes/`, or
   anything under `docs/` requires approval. `docs/index.md` is generated, but regenerating
   it is still a durable write and must be requested or approved.
@@ -416,7 +483,7 @@ context, that is the moment to build one — not before.
   entry's own body, with the reason.
 - **Nothing writes to `notes/` unattended.** A scheduled or automated pass may read
   anything. It may append a `log/` entry only when an owner-approved contract says so,
-  and it never processes or writes `_tmp/` by default. Every
+  and it never processes `inbox/` or touches limbo by default. Every
   change to `notes/` carries human approval. `notes/` is the layer the rest of the system
   trusts; a plausible claim that nobody approved is the one failure the design cannot
   absorb, because everything downstream treats `notes/` as settled. **Automation
@@ -437,8 +504,8 @@ context, that is the moment to build one — not before.
 
 | Script | Does |
 |---|---|
-| `new-node.sh` | Safely scaffolds a node with `notes/`, `log/`, `_tmp/`, and the README template, without overwriting existing files |
-| `check-structure.py` | Validates every node and its local artifact attachment, warns when a linked node's README lacks the `artifacts:` key, declares it without a link, or names a `root` this machine's mapping contradicts (proposing the `root` from that mapping), **and** checks the repository's git state — remote, identity — against the bindings declared in the root README. Run after any restructure, and after anything that touches git |
+| `new-node.sh` | Safely scaffolds a node with `notes/`, `log/`, `inbox/`, and the README template, without overwriting existing files |
+| `check-structure.py` | Validates every node and its local artifact attachment, warns when a linked node's README lacks the `artifacts:` key, declares it without a link, or names a `root` this machine's mapping contradicts (proposing the `root` from that mapping), **and** checks the repository's git state — remote, identity — against the bindings declared in the root README. Notes limbo folders, a leftover `_tmp/`, each node's inbox count and oldest item, and the files that exist only on this machine; warns on tracked files over 1 MB in a slot and on a `.gitignore` that would commit inbox binaries. `--no-git` skips every git query. Run after any restructure, and after anything that touches git |
 | `index-artifacts.py` | Regenerates a node's `docs/index.md` from its cloud folder, in the node's own language. Flags orphans and cloud-pointer files that cannot be read on disk. Its Link column gives each Google pointer file its Drive URL; other files' cells stay empty rather than guessed |
 
 These scripts live under this skill's `scripts/` directory. Resolve that directory for the
@@ -455,7 +522,8 @@ the rule exists, then do what they asked.** Arguing the case is useful; refusing
 
 Two things still deserve a second ask, because a file edit cannot undo them: destroying
 history, and putting binaries or confidential material somewhere it leaks — across the
-git/cloud boundary, or into a shared or work account.
+git/cloud boundary (an inbox binary committed with `git add -f` is this case), or into a
+shared or work account.
 
 **An override is not a precedent.** Do the thing, and leave the rule standing. If the same
 override keeps coming up, that is not licence to change the rule in the moment — **record

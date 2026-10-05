@@ -28,28 +28,17 @@ tags: []
 | `notes/` | Distilled knowledge. Mutable with owner approval as understanding improves. |
 | `log/` | Dated raw evidence. Append-only; correct by adding a later entry. |
 | `docs/` | *Optional.* Cloud-synced artifacts + generated `index.md`. Durable writes require owner approval. Once `docs/drive` is linked, declare its Drive folder in the `artifacts:` frontmatter key. Remove this row if unused. |
-| `_tmp/` | Manual staging. No automatic processing and no deletion without owner approval. |
+| `inbox/` | Captured, not yet filed. Anyone may add; text is tracked, other files stay on this machine. Nothing here is a source, nothing processes it unattended, and removing an item needs owner approval. |
 | `<child>/` | *Optional.* A nested node with its own `README.md` — e.g. a project inside a space. |
 
 > A folder is either a **slot** (the four above) or a **child node** (it has a `README.md`).
-> Anything else belongs in `_tmp/`. Subfolders *inside* a slot are just filing and need no
-> explanation — `notes/discovery/` is obviously notes.
+> Anything else is **limbo**: the owner's own space, which agents leave alone. Subfolders
+> *inside* a slot are just filing and need no explanation — `notes/discovery/` is
+> obviously notes.
 
-## `_tmp/` contract
-
-`_tmp/` is the only place whose meaning is not fixed by the slot it sits in, so it is the
-only place that needs declaring. An agent reads this and honours it.
-
-### `_tmp/` — manual staging
-
-- **Trigger:** The owner explicitly asks an agent to inspect a staged item.
-- **Action:** Do only the requested processing; otherwise leave the folder untouched.
-- **Output:** Propose a destination and request approval before writing durable output.
-- **Disposition:** Keep the source unless the owner approves its exact deletion.
-- **Mode:** Manual/on request. Scheduled and unattended passes do not touch this folder.
-
-Add narrower subfolder contracts below only with owner approval. Silence never grants
-automation or deletion rights.
+<!-- inbox/ follows the default contract in the itakua-map skill: manual, on request,
+     nothing removed without owner approval. Declare a narrower subfolder contract or a
+     non-manual mode here only with owner approval; silence never grants either. -->
 
 ## Conventions
 

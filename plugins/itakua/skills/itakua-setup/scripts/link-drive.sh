@@ -102,7 +102,7 @@ is_node_dir() {
       *) part="$rest"; rest="" ;;
     esac
     if [ "$state" = "node" ]; then
-      case "$part" in notes|log|docs|_tmp) return 1 ;; esac
+      case "$part" in notes|log|docs|inbox|_tmp) return 1 ;; esac
     elif [ "$state" = "orphan" ]; then
       return 1
     fi

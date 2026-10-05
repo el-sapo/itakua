@@ -2,10 +2,13 @@
 """Validate a brain against the four-slot framework, and against its own bindings.
 
     python3 <itakua-map>/scripts/check-structure.py          # structure + git state
-    python3 <itakua-map>/scripts/check-structure.py --no-git # structure only
+    python3 <itakua-map>/scripts/check-structure.py --no-git # structure only, no git calls
 
-A folder is either a SLOT (notes/ log/ docs/ _tmp/) directly inside a node, something
-filed INSIDE a slot, or a CHILD NODE (it has its own README.md). Anything else is drift.
+A folder is either a SLOT (notes/ log/ docs/ inbox/) directly inside a node, something
+filed INSIDE a slot, or a CHILD NODE (it has its own README.md). Any other folder inside a
+node is LIMBO: the owner's, reported as a note and never a failure. A leftover _tmp/ is the
+slot inbox/ replaced in 0.5.0, reported as legacy. A folder under spaces/ whose parent is
+not a node is still a problem: that is a node missing its README.
 
 A node whose docs/drive is linked declares where that folder lives in Drive with an
 `artifacts:` key in its README frontmatter. Readers that cannot follow the symlink -- the
@@ -15,13 +18,21 @@ orphaned key is a WARNING: the key is optional, and a fresh clone has it before 
 The git section exists because the structure was never the part that could hurt you.
 A brain declares bindings in its root README -- remote, identity -- and those are the
 things whose failure is silent and unrecoverable. Structure problems are a tidy-up;
-a work brain pushed to a personal account is not.
+a work brain pushed to a personal account is not. Git also says what the tree cannot:
+which files exist only on this machine, which tracked files are large enough to weigh on
+history for good, and whether the .gitignore keeps binaries out of inbox/. --no-git
+skips every one of those queries.
 """
-import os, sys, json, pathlib, re, subprocess, unicodedata
+import os, sys, json, pathlib, re, subprocess, unicodedata, datetime
 
-SLOTS = ("notes", "log", "docs", "_tmp")
+SLOTS = ("notes", "log", "docs", "inbox")
+LEGACY = "_tmp"                  # the slot inbox/ replaced in 0.5.0
 REQUIRED = ("notes", "log")
+LARGE = 1024 * 1024              # a tracked file in a slot above this gets a warning
 problems, warns, notes = [], [], []
+# Every directory under spaces/, NFC-keyed: container, node, slot, inslot, limbo, legacy
+# or orphan. Kept after the walk so later checks can tell slot content from limbo.
+status = {}
 
 
 # --- structure -------------------------------------------------------------------
@@ -34,33 +45,50 @@ def scan(root):
     beneath it, would be skipped by validation entirely.
     """
     found = []
-    status = {str(root): "container"}
+    limbo_top = {}
+    status[nfc(str(root))] = "container"
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = sorted(d for d in dirnames if not d.startswith("."))
         if dirpath == str(root):
             continue
-        parent = os.path.dirname(dirpath)
+        key, parent = nfc(dirpath), nfc(os.path.dirname(dirpath))
         base = os.path.basename(dirpath)
         pstat = status.get(parent, "container")
+        rel = os.path.relpath(dirpath, ".")
 
         if pstat in ("slot", "inslot"):
-            status[dirpath] = "inslot"
-        elif pstat == "orphan":
-            status[dirpath] = "orphan"            # already reported at the top
+            status[key] = "inslot"
+        elif pstat in ("orphan", "legacy"):
+            status[key] = pstat                   # already reported at the top
+        elif pstat == "limbo":
+            status[key] = "limbo"
+            limbo_top[key] = top = limbo_top[parent]
+            if "README.md" in filenames:
+                warns.append(f"{rel}/ has a README.md but sits inside limbo {top}/, so it "
+                             f"is not validated as a node -- every folder above a node "
+                             f"must be a node too")
         elif base in SLOTS and pstat == "node":
-            status[dirpath] = "slot"
+            status[key] = "slot"
+        elif base == LEGACY and pstat == "node":
+            status[key] = "legacy"
+            notes.append(f"{rel}/ is a legacy _tmp/ -- not a slot since 0.5.0 and still "
+                         f"gitignored; move what should be filed into inbox/ by hand")
         elif "README.md" in filenames:
-            status[dirpath] = "node"
+            status[key] = "node"
             found.append(pathlib.Path(dirpath))
+        elif pstat == "node":
+            status[key] = "limbo"
+            limbo_top[key] = rel
+            notes.append(f"{rel}/ is limbo (neither a slot nor a child node) -- the "
+                         f"owner's; agents leave it alone")
         else:
-            status[dirpath] = "orphan"
-            rel = os.path.relpath(dirpath, ".")
+            status[key] = "orphan"
             if base in SLOTS:
                 problems.append(f"{rel}/ is named like a slot but its parent is not a "
                                 f"node -- give the parent a README.md, or rename this")
             else:
                 problems.append(f"{rel}/ is neither a slot nor a node (no README.md) -- "
-                                f"move its contents into a slot, or give it a README")
+                                f"give it a README.md, or move it inside a node")
     return found
 
 
@@ -75,14 +103,127 @@ def check_nodes(found):
                 problems.append(f"{n}/README.md does not list {s}/, which exists")
             if not (n / s).is_dir() and f"`{s}/`" in readme \
                     and "*Unused" not in readme and "*Optional" not in readme:
-                detail = " -- load itakua-setup to restore local staging" if s == "_tmp" else ""
-                notes.append(f"{n}/README.md mentions {s}/, which does not exist{detail}")
-        if (n / "_tmp").is_dir():
-            if "## `_tmp/` contract" not in readme:
-                problems.append(f"{n}/ has _tmp/ but its README declares no `_tmp/` contract")
-            for field in ("**Disposition:**", "**Mode:**"):
-                if field not in readme:
-                    problems.append(f"{n}/README.md `_tmp/` contract is missing {field}")
+                notes.append(f"{n}/README.md mentions {s}/, which does not exist")
+
+
+# --- inbox -----------------------------------------------------------------------
+
+def inbox_items(inbox):
+    """Every file captured in an inbox, at any depth. Dotfiles (.gitkeep) are not items."""
+    items = []
+    for dirpath, dirnames, filenames in os.walk(inbox):
+        dirnames[:] = sorted(d for d in dirnames if not d.startswith("."))
+        items += [pathlib.Path(dirpath, f) for f in sorted(filenames)
+                  if not f.startswith(".")]
+    return items
+
+
+def first_added(found):
+    """When git first saw each inbox file, by path: one `git log` over every inbox.
+
+    A clone or checkout resets mtime, so on a fresh clone every tracked item would look
+    like it arrived today. The commit that added it does not move.
+    """
+    inboxes = [str(n / "inbox") for n in found if (n / "inbox").is_dir()]
+    out = git_raw("log", "--diff-filter=A", "--relative", "-z", "--name-only",
+                  "--format=%x01%ct", "--", *inboxes) if inboxes else None
+    added, when = {}, None
+    for token in (out or "").split("\0"):
+        token = token.lstrip("\n")
+        if token.startswith("\x01"):
+            when = int(token[1:])
+        elif token and when is not None:
+            added.setdefault(nfc(token), when)    # newest first: the current file's add
+    return added
+
+
+def check_inbox(found, added):
+    """One note per node with something in its inbox: how many, and since when."""
+    today = datetime.date.today()
+    for n in found:
+        inbox = n / "inbox"
+        if not inbox.is_dir():
+            continue
+        items = inbox_items(inbox)
+        if not items:
+            continue
+        stamps = []
+        for item in items:
+            times = [added[k] for k in (nfc(item.as_posix()),) if k in added]
+            try:
+                times.append(item.lstat().st_mtime)
+            except OSError:
+                pass
+            if times:
+                stamps.append(min(times))
+        oldest = datetime.date.fromtimestamp(min(stamps)) if stamps else None
+        age = (f", oldest {oldest.isoformat()} ({(today - oldest).days} day(s))"
+               if oldest else "")
+        notes.append(f"{inbox}/: {len(items)} item(s){age}")
+
+
+# --- what git says about the tree --------------------------------------------------
+
+def node_of(path):
+    """The nearest node at or above `path`, or None when it is not inside one."""
+    d = nfc(path)
+    while d and d != ".":
+        if status.get(d) == "node":
+            return d
+        d = os.path.dirname(d)
+    return None
+
+
+def check_local_only():
+    """Files under spaces/ that git ignores: they exist on this machine and nowhere else.
+
+    docs/drive is excluded (the cloud holds it), and so are dotfiles and legacy _tmp/,
+    which is already reported as a whole.
+    """
+    out = git_raw("ls-files", "-z", "-o", "-i", "--exclude-standard", "--", "spaces")
+    by_node = {}
+    for path in (out or "").split("\0"):
+        folder = os.path.dirname(path)
+        if not path or any(part.startswith(".") for part in path.split("/")):
+            continue
+        if status.get(nfc(folder)) == "legacy":
+            continue
+        if path.endswith("/docs/drive") and status.get(nfc(folder)) == "slot":
+            continue                              # the symlink itself; git never follows it
+        by_node.setdefault(node_of(folder), []).append(path)
+    for node, paths in sorted(by_node.items(), key=lambda kv: kv[0] or ""):
+        shown = [os.path.relpath(p, node) if node else p for p in paths]
+        more = f", and {len(shown) - 5} more" if len(shown) > 5 else ""
+        notes.append(f"{node or 'spaces'}/: {len(paths)} file(s) only on this machine "
+                     f"(ignored by git, outside docs/drive): {', '.join(shown[:5])}{more}")
+
+
+def check_sizes():
+    """Tracked files in a slot above LARGE: git history keeps them for good."""
+    out = git_raw("ls-files", "-z", "--", "spaces")
+    for path in (out or "").split("\0"):
+        if not path or status.get(nfc(os.path.dirname(path))) not in ("slot", "inslot"):
+            continue
+        try:
+            size = os.lstat(path).st_size
+        except OSError:
+            continue
+        if size > LARGE:
+            warns.append(f"{path} is {size / LARGE:.1f} MB and tracked by git -- history "
+                         f"keeps every version; move it to docs/drive unless it must be "
+                         f"versioned")
+
+
+def check_allowlist(found):
+    """Ask git whether a binary dropped in a real inbox would be ignored."""
+    inboxes = [n / "inbox" for n in found if (n / "inbox").is_dir()]
+    if not inboxes:
+        return
+    probe = (inboxes[0] / "capture.heic").as_posix()
+    if git("check-ignore", "-q", "--no-index", probe) is None:
+        warns.append(f".gitignore would commit binaries dropped in inbox/ ({probe} is not "
+                     f"ignored) -- add the inbox allowlist the itakua-map skill gives, so "
+                     f"only text is tracked there")
 
 
 # --- artifact layer ---------------------------------------------------------------
@@ -321,12 +462,18 @@ def check_artifact_store(found):
 
 # --- git state -------------------------------------------------------------------
 
-def git(*args):
+def git_raw(*args):
+    """git's stdout as is, or None when git fails or is missing."""
     try:
         r = subprocess.run(("git",) + args, capture_output=True, text=True, timeout=10)
     except (OSError, subprocess.SubprocessError):
         return None
-    return r.stdout.strip() if r.returncode == 0 else None
+    return r.stdout if r.returncode == 0 else None
+
+
+def git(*args):
+    out = git_raw(*args)
+    return out.strip() if out is not None else None
 
 
 def declared_bindings():
@@ -434,10 +581,16 @@ def main():
         problems.append("legacy areas/ exists beside spaces/ -- new Itakua brains use only "
                         "spaces/. Do not migrate an existing brain without owner approval")
 
+    in_git = "--no-git" not in args and git("rev-parse", "--git-dir") is not None
     found = scan(root)
     check_nodes(found)
+    check_inbox(found, first_added(found) if in_git else {})
     check_artifacts(found)
     check_artifact_store(found)
+    if in_git:
+        check_local_only()
+        check_sizes()
+        check_allowlist(found)
     if "--no-git" not in args:
         check_git()
 
