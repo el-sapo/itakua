@@ -1,46 +1,29 @@
 <title>Itakua</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,500;6..72,600&amp;family=Public+Sans:wght@400;600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="itakua-logo.css">
+<link rel="icon" href="favicon-32.png" sizes="32x32" type="image/png">
+<link rel="icon" href="favicon-16.png" sizes="16x16" type="image/png">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <style>
+  /* Colours are the brand tokens (tokens.css, light and dark). Git and cloud take the note-link
+     and document-link styles: the git and cloud boundary made visible. */
   :root {
-    --ground:  #F1F3F5;
-    --surface: #FFFFFF;
-    --ink:     #1C2530;
-    --muted:   #5C6B7A;
-    --line:    #D3DAE0;
-    --git:     #2F5D8C;
-    --cloud:   #B07A2B;
-    --git-fill:   #E5EDF5;
-    --cloud-fill: #F7EEDC;
+    --ground:  var(--itakua-page);
+    --surface: var(--itakua-surface);
+    --ink:     var(--itakua-ink);
+    --muted:   var(--itakua-muted);
+    --line:    var(--itakua-line);
+    --git:     var(--itakua-note-link);
+    --cloud:   var(--itakua-doc-link);
+    --git-fill:   var(--itakua-surface);
+    --cloud-fill: var(--itakua-doc-link-bg);
 
     --display: "Newsreader", Georgia, "Times New Roman", serif;
     --body: "Public Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
     --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   }
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) {
-      --ground:  #14181C;
-      --surface: #1B2026;
-      --ink:     #E3E8ED;
-      --muted:   #93A1AE;
-      --line:    #2C343C;
-      --git:     #7FA8D4;
-      --cloud:   #D9A650;
-      --git-fill:   #1D2A36;
-      --cloud-fill: #2B2418;
-    }
-  }
-  :root[data-theme="dark"] {
-    --ground:  #14181C;
-    --surface: #1B2026;
-    --ink:     #E3E8ED;
-    --muted:   #93A1AE;
-    --line:    #2C343C;
-    --git:     #7FA8D4;
-    --cloud:   #D9A650;
-    --git-fill:   #1D2A36;
-    --cloud-fill: #2B2418;
-  }
-
   body {
     background: var(--ground);
     color: var(--ink);
@@ -65,14 +48,7 @@
   h2 { font-size: 1.35rem; margin-top: 3rem; }
   p { margin: 0.9rem 0; max-width: 66ch; }
   .lede { font-size: 1.1rem; color: var(--muted); max-width: 60ch; margin-top: 0.6rem; }
-  .eyebrow {
-    font-family: var(--mono);
-    font-size: 0.72rem;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--muted);
-    margin: 0 0 0.9rem;
-  }
+  .logo-line { font-size: 1.5rem; color: var(--ink); margin: 0 0 0.9rem; }
   code, .path { font-family: var(--mono); font-size: 0.88em; }
   .path-git   { color: var(--git); }
   .path-cloud { color: var(--cloud); }
@@ -103,7 +79,8 @@
   .t-body  { font-family: var(--body); }
   .t-lbl   { font-family: var(--mono); font-size: 10px; letter-spacing: 1.2px; fill: var(--muted); }
 
-  table { border-collapse: collapse; width: 100%; margin-top: 1rem; font-size: 0.94rem; }
+  /* Without a doctype tables do not reliably inherit the text colour; keep them on the page's ink. */
+  table { border-collapse: collapse; width: 100%; margin-top: 1rem; font-size: 0.94rem; color: inherit; }
   th, td { text-align: left; padding: 0.6rem 0.9rem 0.6rem 0; border-bottom: 1px solid var(--line); vertical-align: top; }
   th { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; font-family: var(--mono); }
   td:first-child { white-space: nowrap; font-family: var(--mono); font-size: 0.86rem; }
@@ -120,8 +97,8 @@
     margin: 1rem 0;
   }
   .note {
-    border-left: 3px solid var(--cloud);
-    background: var(--cloud-fill);
+    border-left: 3px solid var(--itakua-warning);
+    background: var(--itakua-warning-bg);
     padding: 0.8rem 1rem;
     margin: 1.4rem 0;
     font-size: 0.94rem;
@@ -133,7 +110,7 @@
 </style>
 
 <div class="wrap">
-  <p class="eyebrow">itakua</p>
+  <p class="logo-line"><span class="itakua-logo">itakua</span></p>
   <h1>A safe map for a personal knowledge base</h1>
   <p class="lede">Itakua decides where every file goes, which writes need approval, and how the tooling keeps a brain honest about its declared boundaries.</p>
 
