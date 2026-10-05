@@ -22,7 +22,8 @@ things whose failure is silent and unrecoverable. Structure problems are a tidy-
 a work brain pushed to a personal account is not. Git also says what the tree cannot:
 which files exist only on this machine, which tracked files are large enough to weigh on
 history for good, and whether the .gitignore keeps binaries out of inbox/. --no-git
-skips every one of those queries.
+skips every one of those queries. A query that fails or times out is a WARN, and what it
+would have counted is "not checked" -- never zero, which would be an all-clear.
 
 --report writes status.html at the brain root once the checks finish: the same findings,
 plus each node's inbox, undistilled log entries, limbo and machine-local files, as one
@@ -37,6 +38,7 @@ REQUIRED = ("notes", "log")
 ROOT_INBOX = "00-inbox"
 LARGE = 1024 * 1024              # a tracked file in a slot above this gets a warning
 REPORT = "status.html"
+GIT_TIMEOUT = 10                 # seconds; a slower query is reported, never read as empty
 TEMPLATE = pathlib.Path(__file__).resolve().parent.parent / "assets" / "status-page.html"
 
 # Findings, each as (node, message): node is the NFC path of the node it is about, or None
@@ -48,6 +50,8 @@ facts = {}
 # Every directory under spaces/, NFC-keyed: container, node, slot, inslot, limbo, legacy
 # or orphan. Kept after the walk so later checks can tell slot content from limbo.
 status = {}
+# What a failed git query left unknown ("local", "ages"): shown as not checked, never 0.
+unchecked = set()
 
 
 def problem(msg, node=None):
@@ -167,14 +171,20 @@ def inbox_items(inbox):
 def first_added(pairs):
     """When git first saw each inbox file, by path: one `git log` over every inbox.
 
-    A clone or checkout resets mtime, so on a fresh clone every tracked item would look
-    like it arrived today. The commit that added it does not move.
+    A clone or checkout resets ctime, so on a fresh clone every tracked item would look
+    like it arrived today. The commit that added it does not move. None when the history
+    could not be read.
     """
     paths = [str(path) for _, path in pairs]
-    out = git_raw("log", "--diff-filter=A", "--relative", "-z", "--name-only",
-                  "--format=%x01%ct", "--", *paths) if paths else None
+    if not paths:
+        return {}
+    out = git_query("Inbox ages", "log", "--diff-filter=A", "--relative", "-z",
+                    "--name-only", "--format=%x01%ct", "--", *paths)
+    if out is None:
+        unchecked.add("ages")
+        return None
     added, when = {}, None
-    for token in (out or "").split("\0"):
+    for token in out.split("\0"):
         token = token.lstrip("\n")
         if token.startswith("\x01"):
             when = int(token[1:])
@@ -184,15 +194,23 @@ def first_added(pairs):
 
 
 def check_inbox(pairs, added):
-    """One note per inbox with something in it: how many, and since when."""
+    """One note per inbox with something in it: how many, and since when.
+
+    An item has waited since it arrived: the earlier of its ctime, which a move, copy,
+    download or checkout sets, and the commit that added it. Never mtime: a 2019 PDF
+    dropped in today has not waited since 2019. ctime also moves on any metadata change
+    (an edit, a chmod, an app tagging the file it opens), so an untracked item can look
+    newer than it is, never older. With `added` None the history was unreadable, and
+    ages are not checked rather than guessed from a ctime a checkout may have reset.
+    """
     today = datetime.date.today()
     for node, inbox in pairs:
         items = inbox_items(inbox)
         stamps = []
-        for item in items:
+        for item in items if added is not None else ():
             times = [added[k] for k in (nfc(item.as_posix()),) if k in added]
             try:
-                times.append(item.lstat().st_mtime)
+                times.append(item.lstat().st_ctime)
             except OSError:
                 pass
             if times:
@@ -201,7 +219,8 @@ def check_inbox(pairs, added):
         days = (today - oldest).days if oldest else None
         fact(node)["inbox"] = {"count": len(items), "oldest": oldest, "days": days}
         if items:
-            age = f", oldest {oldest.isoformat()} ({days} day(s))" if oldest else ""
+            age = (", oldest not checked" if added is None else
+                   f", oldest {oldest.isoformat()} ({days} day(s))" if oldest else "")
             note(f"{inbox}/: {len(items)} item(s){age}", node=node)
 
 
@@ -251,10 +270,13 @@ def check_local_only():
     docs/drive is excluded (the cloud holds it), and so are dotfiles and legacy _tmp/,
     which is already reported as a whole.
     """
-    out = git_raw("ls-files", "-z", "-o", "-i", "--exclude-standard", "--",
-                  "spaces", ROOT_INBOX)
+    out = git_query("Files only on this machine", "ls-files", "-z", "-o", "-i",
+                    "--exclude-standard", "--", "spaces", ROOT_INBOX)
+    if out is None:
+        unchecked.add("local")
+        return
     by_node = {}
-    for path in (out or "").split("\0"):
+    for path in out.split("\0"):
         folder = os.path.dirname(path)
         if not path or any(part.startswith(".") for part in path.split("/")):
             continue
@@ -275,8 +297,8 @@ def check_local_only():
 
 def check_sizes():
     """Tracked files in a slot above LARGE: git history keeps them for good."""
-    out = git_raw("ls-files", "-z", "--", "spaces")
-    for path in (out or "").split("\0"):
+    out = git_query("Tracked files over 1 MB", "ls-files", "-z", "--", "spaces")
+    for path in (out or "").split("\0"):           # None: already warned
         if not path or status.get(nfc(os.path.dirname(path))) not in ("slot", "inslot"):
             continue
         try:
@@ -296,7 +318,7 @@ def check_allowlist(found):
         probes.append(pathlib.Path(ROOT_INBOX))
     for inbox in probes:
         probe = (inbox / "capture.heic").as_posix()
-        if git("check-ignore", "-q", "--no-index", probe) is None:
+        if git_ignores(f"The {inbox.name}/ allowlist", probe, "--no-index") is False:
             warn(f".gitignore would commit binaries dropped in {inbox.name}/ ({probe} is "
                  f"not ignored) -- add the inbox allowlist the itakua-map skill gives, so "
                  f"only text is tracked there")
@@ -545,13 +567,53 @@ def check_artifact_store(found):
 
 # --- git state -------------------------------------------------------------------
 
-def git_raw(*args):
-    """git's stdout as is, or None when git fails or is missing."""
+def git_call(*args):
+    """Run git: (result, None), or (None, reason) when it cannot run or times out."""
     try:
-        r = subprocess.run(("git",) + args, capture_output=True, text=True, timeout=10)
-    except (OSError, subprocess.SubprocessError):
-        return None
-    return r.stdout if r.returncode == 0 else None
+        return subprocess.run(("git",) + args, capture_output=True, text=True,
+                              timeout=GIT_TIMEOUT), None
+    except subprocess.TimeoutExpired:
+        return None, f"timed out after {GIT_TIMEOUT} s"
+    except (OSError, subprocess.SubprocessError) as e:
+        return None, str(e) or type(e).__name__
+
+
+def git_failed(what, args, result, reason):
+    if result is not None:
+        reason = (result.stderr.strip().splitlines() or
+                  [f"exit status {result.returncode}"])[0]
+    warn(f"{what} not checked: `git {args[0]}` failed ({reason}) -- run the validator "
+         f"again")
+
+
+def git_query(what, *args):
+    """The stdout of a query a check depends on, or None after a WARN that says so.
+
+    A failed query must never read as an empty answer. "0 files only on this machine"
+    is an all-clear, and git timing out is not one.
+    """
+    result, reason = git_call(*args)
+    if result is not None and result.returncode == 0:
+        return result.stdout
+    git_failed(what, args, result, reason)
+    return None
+
+
+def git_ignores(what, path, *flags):
+    """Whether git ignores `path`: True or False, or None after a WARN when git fails."""
+    args = ("check-ignore", "-q", *flags, path)
+    result, reason = git_call(*args)
+    if result is not None and result.returncode in (0, 1):
+        return result.returncode == 0
+    git_failed(what, args, result, reason)
+    return None
+
+
+def git_raw(*args):
+    """git's stdout as is, or None when git fails. Only for lookups where failing means
+    absent, like an unset config key; anything a check counts goes through git_query."""
+    result, _ = git_call(*args)
+    return result.stdout if result is not None and result.returncode == 0 else None
 
 
 def git(*args):
@@ -591,14 +653,17 @@ def check_git():
         return
 
     declared = declared_bindings()
-    remotes = [r for r in (git("remote") or "").splitlines() if r.strip()]
+    listed = git_query("Git remote", "remote")
+    remotes = None if listed is None else [r for r in listed.splitlines() if r.strip()]
     local_name = git("config", "--local", "user.name")
     local_mail = git("config", "--local", "user.email")
     global_mail = git("config", "--global", "user.email")
 
     # --- remote ---
     decl_remote = declared.get("git remote", "")
-    if remotes:
+    if remotes is None:
+        fact(None)["remote"] = "not checked"     # the WARN says why
+    elif remotes:
         urls = ", ".join(f"{r} -> {git('remote', 'get-url', r) or '?'}" for r in remotes)
         fact(None)["remote"] = urls
         if re.search(r"\bnone\b", decl_remote, re.I) and "none yet" not in decl_remote.lower():
@@ -691,12 +756,18 @@ def inbox_html(info):
         return '<span data-count="inbox">0</span> <span class="quiet">items</span>'
     age = (f' · oldest {info["oldest"].isoformat()} ({plural(info["days"], "day")})'
            if info["oldest"] else "")
-    return f'<strong class="attn" data-count="inbox">{info["count"]}</strong> item(s){esc(age)}'
+    if "ages" in unchecked:
+        age = ' · <span class="quiet">oldest not checked: git failed</span>'
+    else:
+        age = esc(age)
+    return f'<strong class="attn" data-count="inbox">{info["count"]}</strong> item(s){age}'
 
 
 def local_html(paths, in_git):
     if not in_git:
         return '<span class="quiet">not checked without git</span>'
+    if "local" in unchecked:
+        return '<span class="quiet">not checked: git failed</span>'
     if not paths:
         return '<span data-count="local">0</span> <span class="quiet">files</span>'
     items = "".join(f"<li>{esc(p)}</li>" for p in paths)
@@ -760,7 +831,7 @@ def brain_html(git_mode):
             f"{findings_html(None)}</section>")
 
 
-def tiles_html(found):
+def tiles_html(found, git_mode):
     every = [facts.get(key(n), {}) for n in found] + [facts.get(None, {})]
     inbox = [f["inbox"] for f in every if f.get("inbox")]
     oldest = max((i["days"] for i in inbox if i["days"] is not None), default=None)
@@ -771,13 +842,18 @@ def tiles_html(found):
         ("warnings", len(warns), "Warnings", "warn" if warns else ""),
         ("notes", len(notes), "Notes", ""),
         ("inbox", waiting, "Inbox items", "attn" if waiting else ""),
-        ("oldest", "–" if oldest is None else oldest, "Days the oldest has waited", ""),
+        ("oldest", "–" if oldest is None else oldest,
+         "Days the oldest has waited" + (" · not checked" if "ages" in unchecked else ""),
+         ""),
         ("undistilled", undistilled, "Undistilled log entries",
          "attn" if undistilled else ""),
         ("limbo", sum(len(f.get("limbo", [])) for f in every), "Limbo folders", ""),
-        ("local", sum(len(f.get("local_only", [])) for f in every),
-         "Files only on this machine", ""),
     ]
+    if git_mode == "used" and "local" not in unchecked:
+        tiles.append(("local", sum(len(f.get("local_only", [])) for f in every),
+                      "Files only on this machine", ""))
+    else:
+        tiles.append(("local", "–", "Files only on this machine · not checked", ""))
     return "".join(f'<div class="tile {cls}"><div class="num" data-total="{name}">{value}'
                    f'</div><div class="label">{label}</div></div>'
                    for name, value, label, cls in tiles)
@@ -797,7 +873,7 @@ def write_report(found, git_mode, verdict):
         host=esc(platform.node() or "an unnamed machine"),
         verdict_class="bad" if problems else "ok",
         verdict=esc(verdict),
-        tiles=tiles_html(found),
+        tiles=tiles_html(found, git_mode),
         brain_section=brain_html(git_mode),
         node_count=len(found),
         nodes=nodes or '<p class="quiet">No nodes yet.</p>',
@@ -841,7 +917,8 @@ def main():
         check_allowlist(found)
     if "--no-git" not in args:
         check_git()
-    if "--report" in args and in_git and git("check-ignore", "-q", REPORT) is None:
+    if "--report" in args and in_git and \
+            git_ignores(f"The {REPORT} ignore rule", REPORT) is False:
         warn(f"{REPORT} is not gitignored -- add /{REPORT} to .gitignore; the page is "
              f"regenerated per machine and is never committed")
 

@@ -157,16 +157,28 @@ class InboxSlotTests(unittest.TestCase):
     def test_inbox_count_and_oldest_item(self):
         with tempfile.TemporaryDirectory() as temp:
             brain, node = self.plain_brain(temp)
-            old = self.write(node / "inbox" / "old.md")
-            stamp = datetime.datetime(2026, 1, 2, 12).timestamp()
-            os.utime(old, (stamp, stamp))
+            self.write(node / "inbox" / "clip.md")
             self.write(node / "inbox" / "sub" / "new.txt")
             self.write(node / "inbox" / ".DS_Store")
 
             result = self.validate(brain, "--no-git")
 
-            self.assertIn("spaces/project/inbox/: 2 item(s), oldest 2026-01-02",
+            today = datetime.date.today().isoformat()
+            self.assertIn(f"spaces/project/inbox/: 2 item(s), oldest {today} (0 day(s))",
                           "\n".join(self.lines(result, "note")))
+
+    def test_an_old_file_dropped_in_today_has_waited_since_today(self):
+        with tempfile.TemporaryDirectory() as temp:
+            brain, node = self.plain_brain(temp)
+            pdf = self.write(node / "inbox" / "statement-2019.pdf")
+            stamp = datetime.datetime(2019, 3, 2, 12).timestamp()
+            os.utime(pdf, (stamp, stamp))          # modified in 2019, arrived now
+
+            result = self.validate(brain, "--no-git")
+
+            today = datetime.date.today().isoformat()
+            self.assertIn(f"inbox/: 1 item(s), oldest {today} (0 day(s))", result.stdout)
+            self.assertNotIn("2019", result.stdout.replace("statement-2019", ""))
 
     def test_empty_inbox_prints_nothing(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -176,12 +188,12 @@ class InboxSlotTests(unittest.TestCase):
 
             self.assertNotIn("inbox/:", result.stdout)
 
-    def test_oldest_item_survives_a_reset_mtime_through_git(self):
+    def test_oldest_item_survives_a_fresh_checkout_through_git(self):
         with tempfile.TemporaryDirectory() as temp:
             brain, node = self.git_brain(temp)
             clip = self.write(node / "inbox" / "clip.md")
             self.commit(brain, clip, date="2026-02-03T12:00:00")
-            os.utime(clip)                         # what a fresh clone does to mtime
+            os.utime(clip)                         # resets ctime, as a fresh clone does
 
             with_git = self.validate(brain)
             without = self.validate(brain, "--no-git")
