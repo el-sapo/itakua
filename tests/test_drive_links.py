@@ -378,6 +378,22 @@ class DriveFolderUrlTests(BrainMixin, unittest.TestCase):
             self.assertNotIn("PROBLEM", result.stdout)
             self.assertNoMachinePath(temp, result.stdout)
 
+    def test_url_is_proposed_where_no_root_can_be(self):
+        # Drive's "Other computers" has no My Drive or Shared drives anchor to name a root.
+        with tempfile.TemporaryDirectory() as temp:
+            brain, node = self.make_brain(temp)
+            target = self.drive_folder(temp, "Other computers", "Mac", "Project")
+            (node / "docs" / "drive").symlink_to(target)
+
+            result = self.run_validator(
+                brain, fake_xattr_env(temp, {target: self.FOLDER_ID}))
+
+            warned = "\n".join(self.warnings(result))
+            self.assertIn("declares no `artifacts:` key", warned)
+            self.assertIn(f"`url: {FOLDERS}{self.FOLDER_ID}`", warned)
+            self.assertNotIn("root:", warned)
+            self.assertNotIn("Other computers", warned)
+
     def test_id_is_read_from_the_resolved_target(self):
         # docs/drive -> alias/My Drive/Project, where alias is itself a symlink: the fake
         # answers only for the real path, as the real command need not follow links.
@@ -401,6 +417,7 @@ class DriveFolderUrlTests(BrainMixin, unittest.TestCase):
             "a folder without the attribute": no_attribute,
             "a value too short": "short",
             "a value not shaped like an id": "not an id!",
+            "an id with other text": f"{self.FOLDER_ID} extra",
             "an empty value": "",
             "a failed read": {"stdout": self.FOLDER_ID + "\n", "exit": 1},
         }
@@ -475,6 +492,7 @@ class DriveFolderUrlTests(BrainMixin, unittest.TestCase):
             "drive.google.com/drive/folders/": "not an https link",
             FOLDERS: "carries no folder id",
             f"{FOLDERS}?usp=sharing": "carries no folder id",
+            f"'{FOLDERS}{self.OTHER_ID}": "cannot be read",     # the closing quote forgotten
         }
         for url, expected in cases.items():
             with self.subTest(url=url), tempfile.TemporaryDirectory() as temp:
@@ -632,6 +650,51 @@ class IndexLinkColumnTests(unittest.TestCase):
             self.assertIn("songs/Tab.docx", warning[0])
             self.assertIn("5 Drive link(s)", result.stdout)
 
+    def test_an_answer_that_is_no_id_keeps_the_previous_link(self):
+        cases = {
+            "a value too short": "short",
+            "a value not shaped like an id": "not an id!",
+            "an id with other text": f"{self.NEW_FILE_ID} extra",
+            "an empty value": "",
+            "a failed read": {"stdout": self.NEW_FILE_ID + "\n", "exit": 1},
+        }
+        for case, answer in cases.items():
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as temp:
+                node = self.build(temp)
+                tab = Path(temp) / "drive" / "songs" / "Tab.docx"
+                self.run_indexer(node, "en", fake_xattr_env(temp, {tab: self.FILE_ID}))
+
+                result, index = self.run_indexer(
+                    node, "en", fake_xattr_env(temp, {tab: answer}))
+
+                self.assertEqual(self.row(index, "Tab.docx")[-1],
+                                 self.file_url(self.FILE_ID))
+                self.assertNotIn(self.NEW_FILE_ID, index)
+                warning = [l for l in result.stdout.splitlines() if "WARNING" in l]
+                self.assertEqual(len(warning), 1, result.stdout)
+                self.assertIn("1 link(s) kept from the previous index", warning[0])
+                self.assertIn("songs/Tab.docx", warning[0])
+
+    def test_the_kept_links_warning_names_five_paths(self):
+        with tempfile.TemporaryDirectory() as temp:
+            node = self.build(temp)
+            songs = Path(temp) / "drive" / "songs"
+            answers = {songs / "Tab.docx": self.FILE_ID}
+            for i in range(6):
+                (songs / f"Take{i}.pdf").write_bytes(b"%PDF-1.4")
+                answers[songs / f"Take{i}.pdf"] = f"1TaKeFiLe{i}AbCdEfGhIjK"
+            self.run_indexer(node, "en", fake_xattr_env(temp, answers))
+
+            result, index = self.run_indexer(node, "en")
+
+            for path, file_id in answers.items():
+                self.assertEqual(self.row(index, path.name)[-1], self.file_url(file_id))
+            warning = [l for l in result.stdout.splitlines() if "WARNING" in l]
+            self.assertEqual(len(warning), 1, result.stdout)
+            self.assertIn("7 link(s) kept from the previous index", warning[0])
+            self.assertEqual(warning[0].count("songs/"), 5, warning[0])
+            self.assertTrue(warning[0].endswith(", and 2 more"), warning[0])
+
     def test_a_readable_id_replaces_the_previous_link(self):
         with tempfile.TemporaryDirectory() as temp:
             node = self.build(temp)
@@ -650,7 +713,9 @@ class IndexLinkColumnTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             node = self.build(temp)
             ids = ["1RoOtLeVeLtAbAbCdEfGhIjK", "1OtHeRfOlDeRtAbAbCdEfGh",
-                   "1RoOtSoNgPoInTeRaBcDeFgH", "1OlDdOcXnOtHeReAbCdEfGh"]
+                   "1RoOtSoNgPoInTeRaBcDeFgH", "1OlDdOcXnOtHeReAbCdEfGh",
+                   "1TwIcEnAmEdOnEaBcDeFgHiJ", "1TwIcEnAmEdTwOaBcDeFgHiJ"]
+            (Path(temp) / "drive" / "songs" / "Zed.pdf").write_bytes(b"%PDF-1.4")
             (node / "docs" / "index.md").write_text("\n".join([
                 "## Root", "",
                 "| File | Type | Size | Link |", "|---|---|---|---|",
@@ -661,7 +726,10 @@ class IndexLinkColumnTests(unittest.TestCase):
                 "## `songs/`", "",
                 "| File | Type | Size | Link |", "|---|---|---|---|",
                 f"| `Old.docx` | docx | 1 KB | {self.file_url(ids[3])} |",
-                "| `Tab.docx` | docx | 15 B | <https://example.com/Tab.docx> |", "",
+                "| `Tab.docx` | docx | 15 B | <https://example.com/Tab.docx> |",
+                # Two rows naming one path: neither link can be told to be the right one.
+                f"| `Zed.pdf` | pdf | 8 B | {self.file_url(ids[4])} |",
+                f"| `Zed.pdf` | pdf | 8 B | {self.file_url(ids[5])} |", "",
                 "## Accepted pointers (1)", "",
                 "| File | Kind | Link |", "|---|---|---|",
                 f"| `Deck.gslides/x` | Google Slides | {self.file_url(ids[2])} |",
@@ -672,6 +740,7 @@ class IndexLinkColumnTests(unittest.TestCase):
 
             self.assertEqual(self.row(index, "Tab.docx")[-1], "")
             self.assertEqual(self.row(index, "Deck.gslides")[-1], "")
+            self.assertEqual(self.row(index, "Zed.pdf")[-1], "")
             for file_id in ids:
                 self.assertNotIn(file_id, index)
             self.assertNotIn("example.com", index)
@@ -711,6 +780,51 @@ class IndexLinkColumnTests(unittest.TestCase):
                                  self.file_url(self.NEW_FILE_ID))
                 self.assertIn(f"open?id={self.DOC_ID}", self.row(index, "songs/Song.gdoc")[-1])
                 self.assertIn(f"open?id={self.SHEET_ID}", self.row(index, "Inventory.gsheet")[-1])
+                self.assertIn("4 link(s) kept from the previous index", result.stdout)
+
+    def test_a_previous_link_is_matched_across_unicode_forms(self):
+        # macOS may hand back a decomposed name; the previous index may hold either form.
+        composed = unicodedata.normalize("NFC", "Canción.docx")
+        decomposed = unicodedata.normalize("NFD", "Canción.docx")
+        for on_disk, listed in ((decomposed, composed), (composed, decomposed)):
+            with self.subTest(on_disk=ascii(on_disk)), tempfile.TemporaryDirectory() as temp:
+                node = self.build(temp)
+                (Path(temp) / "drive" / on_disk).write_bytes(b"ab")
+                (node / "docs" / "index.md").write_text("\n".join([
+                    "## Root", "",
+                    "| File | Type | Size | Link |", "|---|---|---|---|",
+                    f"| `{listed}` | docx | 2 B | {self.file_url(self.FILE_ID)} |", "",
+                ]), encoding="utf-8")
+
+                result, index = self.run_indexer(node, "en")
+
+                self.assertEqual(self.row(index, on_disk)[-1], self.file_url(self.FILE_ID))
+                warning = [l for l in result.stdout.splitlines() if "WARNING" in l]
+                self.assertEqual(len(warning), 1, result.stdout)
+                self.assertIn("1 link(s) kept from the previous index", warning[0])
+
+    def test_awkward_names_keep_their_own_links(self):
+        # A folder named like either language's root keeps its own heading, so its files
+        # are never read back as root files; a | in an extension does not hide a row.
+        for lang in ("en", "es"):
+            with self.subTest(lang=lang), tempfile.TemporaryDirectory() as temp:
+                node = self.build(temp)
+                drive = Path(temp) / "drive"
+                answers = {}
+                for i, path in enumerate((drive / "Tab.docx", drive / "(root)" / "Tab.docx",
+                                          drive / "(raíz)" / "Tab.docx", drive / "x.p|f")):
+                    path.parent.mkdir(exist_ok=True)
+                    path.write_bytes(b"ab")
+                    answers[path] = f"1AwKwArDnAmE{i}AbCdEfGhIj"
+                _, first = self.run_indexer(node, lang, fake_xattr_env(temp, answers))
+
+                result, second = self.run_indexer(node, lang)
+
+                self.assertIn("## `(root)/`", first)
+                self.assertIn("## `(raíz)/`", first)
+                for file_id in answers.values():
+                    self.assertEqual(first.count(file_id), 1, first)
+                self.assertEqual(second.split("\n## ")[1:], first.split("\n## ")[1:])
                 self.assertIn("4 link(s) kept from the previous index", result.stdout)
 
     def test_after_one_timeout_no_other_file_is_asked(self):

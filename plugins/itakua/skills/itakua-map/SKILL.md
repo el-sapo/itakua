@@ -429,9 +429,10 @@ without the folder's Drive id. `url` carries it.
   Drive id in the `com.google.drivefs.item-id#S` extended attribute — confirmed for files,
   not yet for folders. Where this machine can read the folder's, `check-structure.py`
   proposes the `url` and warns when the declared one names another folder; where it
-  cannot, it says nothing about `url`, and the link comes from *Copy link*.
-- The key travels with the clone; the link does not. A fresh clone with the key and no
-  link is the cue to load `itakua-setup`.
+  cannot, it only checks that a declared `url` is a Drive folder link, and the link comes
+  from *Copy link*.
+- The key travels with the clone; the `docs/drive` symlink does not. A fresh clone with
+  the key and no symlink is the cue to load `itakua-setup`.
 - Writing it is a README edit, so it needs owner approval.
 
 ## Citing an artifact
@@ -454,9 +455,9 @@ depends on whether anyone will want to open it.
   citation is fine.
 
 Take the URL from the generated `docs/index.md`, which carries it for Google pointer files
-and for every other file whose Drive id the indexing machine could read, from Drive's
-*Copy link*, or from an agent's own Drive connector. Never build one from a guessed id.
-Adding a URL to an existing note is a `notes/` edit and needs owner approval.
+and for every other listed file whose Drive id the indexing machine could read, from
+Drive's *Copy link*, or from an agent's own Drive connector. Never build one from a
+guessed id. Adding a URL to an existing note is a `notes/` edit and needs owner approval.
 
 ## When a node goes dormant
 
@@ -521,7 +522,7 @@ context, that is the moment to build one — not before.
 | Script | Does |
 |---|---|
 | `new-node.sh` | Safely scaffolds a node with `notes/`, `log/`, `inbox/`, and the README template, without overwriting existing files |
-| `check-structure.py` | Validates every node and its local artifact attachment, warns when a linked node's README lacks the `artifacts:` key, declares it without a link, or names a `root` this machine's mapping contradicts (proposing the `root` from that mapping), or a `url` that is not a Drive folder link; where this machine can read the linked folder's Drive id, it also proposes a missing `url` and warns on one that names another folder, **and** checks the repository's git state — remote, identity — against the bindings declared in the root README. Notes limbo folders, a leftover `_tmp/`, each node's inbox count and oldest item, and the files that exist only on this machine; warns on tracked files over 1 MB in a slot and on a `.gitignore` that would commit inbox binaries. A git query that fails or times out is a warning, and what it would have counted shows as not checked, never as zero. `--no-git` skips every git query. `--report` also writes `status.html` at the brain root: one static dashboard that opens offline, with the verdict and totals, problems and warnings first, every node's counts in one table, and notes that differ only by node folded into one line; without it the validator writes nothing. Run after any restructure, and after anything that touches git |
+| `check-structure.py` | Validates every node and its local artifact attachment, warns when a linked node's README lacks the `artifacts:` key, declares it without a `docs/drive` link, or names a `root` this machine's mapping contradicts (proposing the `root` from that mapping), or a `url` that is not a Drive folder link; where this machine can read the linked folder's Drive id, it also proposes a missing `url` and warns on one that names another folder, **and** checks the repository's git state — remote, identity — against the bindings declared in the root README. Notes limbo folders, a leftover `_tmp/`, each node's inbox count and oldest item, and the files that exist only on this machine; warns on tracked files over 1 MB in a slot and on a `.gitignore` that would commit inbox binaries. A git query that fails or times out is a warning, and what it would have counted shows as not checked, never as zero. `--no-git` skips every git query. `--report` also writes `status.html` at the brain root: one static dashboard that opens offline, with the verdict and totals, problems and warnings first, every node's counts in one table, and notes that differ only by node folded into one line; without it the validator writes nothing. Run after any restructure, and after anything that touches git |
 | `index-artifacts.py` | Regenerates a node's `docs/index.md` from its cloud folder, in the node's own language. Flags orphans and cloud-pointer files that cannot be read on disk. Its Link column gives each Google pointer file its Drive URL, and each other listed file the URL of the Drive id Drive for Desktop keeps on it on macOS, where this machine can read it. A cell it cannot fill keeps the link the previous index had for that same path, with a warning, so a machine that cannot read ids never blanks them; otherwise it stays empty, never guessed |
 
 These scripts live under this skill's `scripts/` directory. Resolve that directory for the

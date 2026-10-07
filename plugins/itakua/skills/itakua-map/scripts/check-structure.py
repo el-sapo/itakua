@@ -14,7 +14,7 @@ not a node is still a problem: that is a node missing its README.
 A node whose docs/drive is linked declares where that folder lives in Drive with an
 `artifacts:` key in its README frontmatter. Readers that cannot follow the symlink -- the
 Reader, an agent on the MCP server -- have nothing else to go on. A missing, stale or
-orphaned key is a WARNING: the key is optional, and a fresh clone has it before the link.
+orphaned key is a WARNING: the key is optional; a fresh clone has it before the symlink.
 Its optional `url` is the folder's Drive link, because a path is not one. On macOS, Drive
 for Desktop may keep the folder's Drive id in the com.google.drivefs.item-id#S attribute;
 where this machine can read it, a missing url is proposed and a contradicting one warned.

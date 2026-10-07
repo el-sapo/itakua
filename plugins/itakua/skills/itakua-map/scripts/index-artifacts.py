@@ -183,14 +183,15 @@ def previous_links(index):
     Read back from the tables this script writes, in either language: under the root
     heading or a folder's (## `<folder>/`) a row names a file in that folder; under any
     other heading (the pointer tables) it names its whole path. Only drive.google.com
-    links are kept, each for the path its own row names and no other.
+    links are kept, each for the path its own row names and no other; a path two rows
+    give different links is ambiguous, and neither is kept.
     """
     try:
         text = pathlib.Path(index).read_text(encoding="utf-8")
     except (OSError, UnicodeError):
         return {}
     roots = {S["root_head"] for S in STRINGS.values()}
-    links, folder = {}, None
+    links, ambiguous, folder = {}, set(), None
     for line in text.splitlines():
         line = line.rstrip()
         if line.startswith("## "):
@@ -201,11 +202,18 @@ def previous_links(index):
         if not m:
             continue
         name, between, url = m.groups()
-        if folder is None and "|" not in between:            # File | Kind | Link
-            links[nfc(name)] = url
-        elif folder is not None and between.count("|") == 1:  # File | Type | Size | Link
-            links[nfc(f"{folder}/{name}" if folder else name)] = url
-    return links
+        # File | Kind | Link in the pointer tables; File | Type | Size | Link under a
+        # folder, where Type is the file's extension and may hold a | of its own.
+        if folder is None and "|" not in between:
+            path = name
+        elif folder is not None and "|" in between:
+            path = f"{folder}/{name}" if folder else name
+        else:
+            continue
+        path = nfc(path)
+        if links.setdefault(path, url) != url:
+            ambiguous.add(path)
+    return {path: url for path, url in links.items() if path not in ambiguous}
 
 
 def nfc(text):
@@ -302,7 +310,9 @@ def main():
                                  link(path, pointer_link(os.path.join(dirpath, fn)))))
                 continue
             total += size
-            groups.setdefault(rel or S["root_key"], []).append(
+            # The root is keyed "", which no folder can be named: a folder called
+            # "(root)" keeps its own heading, and no file is listed under the wrong one.
+            groups.setdefault(rel, []).append(
                 (fn, size, ext, path, os.path.join(dirpath, fn)))
 
     out = [
@@ -313,10 +323,10 @@ def main():
         S["generated"].format(node=node), "",
         S["summary"].format(count=count, size=human(total), date=today), "",
     ]
-    for folder in sorted(groups):
+    for folder in sorted(groups, key=lambda f: f or S["root_key"]):
         files = groups[folder]
         sub = sum(s for _, s, *_ in files)
-        out += [f"## `{folder}/`" if folder != S["root_key"] else S["root_head"], "",
+        out += [f"## `{folder}/`" if folder else S["root_head"], "",
                 S["folder_sub"].format(n=len(files), size=human(sub)), ""]
         if len(files) > COLLAPSE_OVER:
             # too many to list one by one -- summarise by type
