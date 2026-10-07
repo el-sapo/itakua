@@ -44,15 +44,19 @@ confirmed; where it does not, no folder line is written.
 """
 import os, sys, datetime, json, pathlib, re, shutil, subprocess, unicodedata
 
-COLLAPSE_OVER = 12   # folders bigger than this are summarised by type
+# A folder with more files than this is summarised by type rather than listed file by
+# file. Only real asset dumps should reach it; the number lives here and nowhere else.
+COLLAPSE_OVER = 50
 POINTERS = {".gdoc": "Google Doc", ".gsheet": "Google Sheet", ".gslides": "Google Slides"}
 DRIVE_ID = re.compile(r"[A-Za-z0-9_-]{10,}")
 # Where Drive for Desktop on macOS keeps a synced file's Drive id.
 ITEM_ID_XATTR = "com.google.drivefs.item-id#S"
 XATTR_TIMEOUT = 5    # seconds; after one timeout no other file is asked
 # How Drive for Desktop is reported to mark the id of an item that has not finished
-# uploading. No real Drive id starts this way, so such a value is never written.
+# uploading. No real Drive id starts this way, so such a value is never written: not
+# from the attribute, a pointer stub, or a link the previous index carried.
 TEMPORARY_ID = "local-"
+TEMPORARY_LINK = re.compile(r"(?:/d/|/folders/|[?&]id=)" + re.escape(TEMPORARY_ID))
 # A row of an index this script wrote, with a Drive link: `name`, the cells between, link.
 OLD_ROW = re.compile(r"\| `(.+)` \|(.*)\| *<(https://drive\.google\.com/[^\s<>|]+)> *\|")
 FOLDER_URL = "https://drive.google.com/drive/folders/{}"
@@ -150,7 +154,7 @@ def pointer_link(path):
         m = re.fullmatch(r"(?:document|spreadsheet|presentation):(.+)", rid) \
             if isinstance(rid, str) else None
         file_id = m.group(1) if m else ""
-    if not DRIVE_ID.fullmatch(file_id):
+    if not DRIVE_ID.fullmatch(file_id) or file_id.startswith(TEMPORARY_ID):
         return ""
     url = f"https://drive.google.com/open?id={file_id}"
     key = data.get("resource_key")
@@ -223,8 +227,9 @@ def previous_links(index):
     heading or a folder's (## `<folder>/`) a row names a file in that folder; under any
     other heading (the pointer tables) it names its whole path. A folder's own line, under
     its heading, is keyed by folder_key. Only drive.google.com links are kept, each for
-    the path its own row names and no other; a path two rows give different links is
-    ambiguous, and neither is kept.
+    the path its own row names and no other, and none carrying a temporary id; a path two
+    rows give different links is ambiguous, and neither is kept. Lines are split as they
+    were written, on newlines only, so no character inside a name starts a new one.
     """
     try:
         text = pathlib.Path(index).read_text(encoding="utf-8")
@@ -232,7 +237,7 @@ def previous_links(index):
         return {}
     roots = {S["root_head"] for S in STRINGS.values()}
     links, ambiguous, folder = {}, set(), None
-    for line in text.splitlines():
+    for line in text.split("\n"):
         line = line.rstrip()
         if line.startswith("## "):
             m = re.fullmatch(r"## `(.+)/`", line)
@@ -241,6 +246,8 @@ def previous_links(index):
         m = FOLDER_LINE.fullmatch(line)
         if m and folder is not None:
             path, url = nfc(folder_key(folder)), next(g for g in m.groups() if g)
+            if TEMPORARY_LINK.search(url):
+                continue
             if links.setdefault(path, url) != url:
                 ambiguous.add(path)
             continue
@@ -257,6 +264,8 @@ def previous_links(index):
         else:
             continue
         path = nfc(path)
+        if TEMPORARY_LINK.search(url):
+            continue
         if links.setdefault(path, url) != url:
             ambiguous.add(path)
     return {path: url for path, url in links.items() if path not in ambiguous}
@@ -392,7 +401,7 @@ def main():
             # too many to list one by one -- summarise by type
             gone = sum(nfc(path) in before for *_, path, _ in files)
             if gone:
-                dropped[folder] = gone
+                dropped[folder] = (gone, bool(url))
             byext = {}
             for fn, size, ext, *_ in files:
                 e = ext.lstrip(".") or "—"
@@ -483,10 +492,14 @@ def main():
               f"the index once Drive shows them synced")
     if dropped:
         folders = ", ".join(f"{f}/" if f else "the root" for f in sorted(dropped))
-        print(f"  {sum(dropped.values())} link(s) from the previous index dropped: "
-              f"{folders} now hold(s) more than {COLLAPSE_OVER} files, summarised by type "
-              f"with no link cells; cite those files through the folder's Drive link, or "
-              f"each file's own Copy link")
+        with_line = [has for _, has in dropped.values()]
+        through = ("the Drive folder link under its heading, or " if all(with_line) else
+                   "the Drive folder link under its heading where the index has one, or "
+                   if any(with_line) else "")
+        print(f"  {sum(n for n, _ in dropped.values())} link(s) from the previous index "
+              f"dropped: {folders} now hold(s) more than {COLLAPSE_OVER} files, summarised "
+              f"by type with no link cells; cite those files through {through}each file's "
+              f"own Copy link")
     if orphans:
         print(f"  🚨 WARNING: {len(orphans)} orphan file(s) ({human(orphan_bytes)}) in "
               f"{docs_dir} are in NEITHER git NOR cloud storage — move them under docs/drive/")

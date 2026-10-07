@@ -28,6 +28,9 @@ MAP = REPO_ROOT / "plugins" / "itakua" / "skills" / "itakua-map"
 VALIDATOR = MAP / "scripts" / "check-structure.py"
 INDEXER = MAP / "scripts" / "index-artifacts.py"
 NEW_NODE = MAP / "scripts" / "new-node.sh"
+# The indexer's limit, read from the script: a folder with more files is summarised.
+COLLAPSE_OVER = int(re.search(r"(?m)^COLLAPSE_OVER = (\d+)$",
+                              INDEXER.read_text(encoding="utf-8")).group(1))
 
 KEY = "artifacts:\n  provider: google-drive\n  root: {root}\n"
 URL_KEY = KEY + "  url: {url}\n"
@@ -901,27 +904,52 @@ class IndexLinkColumnTests(unittest.TestCase):
             takes = Path(temp) / "drive" / "takes"
             takes.mkdir()
             answers = {}
-            for i in range(13):
-                answers[takes / f"take{i:02}.pdf"] = f"1TaKeIdNuMbEr{i:02}AbCdEfGh"
-            for path in list(answers)[:12]:
-                path.write_bytes(b"%PDF-1.4")
+            for i in range(COLLAPSE_OVER + 1):
+                answers[takes / f"take{i:03}.pdf"] = f"1TaKeIdNuMbEr{i:03}AbCdEfGh"
+            last = takes / f"take{COLLAPSE_OVER:03}.pdf"
+            for path in answers:
+                if path != last:
+                    path.write_bytes(b"%PDF-1.4")
             env = fake_xattr_env(temp, answers)
             listed, first = self.run_indexer(node, "en", env)
-            (takes / "take12.pdf").write_bytes(b"%PDF-1.4")
+            last.write_bytes(b"%PDF-1.4")
 
             grown, second = self.run_indexer(node, "en", env)
             again, third = self.run_indexer(node, "en", env)
 
-            self.assertEqual(first.count("1TaKeIdNuMbEr"), 12, first)
+            self.assertEqual(first.count("1TaKeIdNuMbEr"), COLLAPSE_OVER, first)
             self.assertNotIn("dropped", listed.stdout)
             self.assertNotIn("1TaKeIdNuMbEr", second)
             dropped = [l for l in grown.stdout.splitlines() if "dropped" in l]
             self.assertEqual(len(dropped), 1, grown.stdout)
-            self.assertIn("12 link(s) from the previous index dropped: takes/", dropped[0])
-            self.assertIn("more than 12 files", dropped[0])
-            self.assertIn("through the folder's Drive link", dropped[0])
+            self.assertIn(f"{COLLAPSE_OVER} link(s) from the previous index dropped: takes/",
+                          dropped[0])
+            self.assertIn(f"more than {COLLAPSE_OVER} files", dropped[0])
+            # No folder id was readable, so no folder line to point to.
+            self.assertNotIn("Drive folder:", second)
+            self.assertIn("cite those files through each file's own Copy link", dropped[0])
             self.assertNotIn("dropped", again.stdout)
             self.assertEqual(third, second)
+
+    def test_the_dropped_links_line_points_to_a_folder_line_only_where_one_is_written(self):
+        with tempfile.TemporaryDirectory() as temp:
+            node = self.build(temp)
+            takes = Path(temp) / "drive" / "takes"
+            takes.mkdir()
+            answers = {takes: "1TaKeSfOlDeRiDaBcDeFgHiJk"}
+            for i in range(COLLAPSE_OVER):
+                (takes / f"take{i:03}.pdf").write_bytes(b"%PDF-1.4")
+                answers[takes / f"take{i:03}.pdf"] = f"1TaKeIdNuMbEr{i:03}AbCdEfGh"
+            env = fake_xattr_env(temp, answers)
+            self.run_indexer(node, "en", env)
+            (takes / "extra.pdf").write_bytes(b"%PDF-1.4")
+
+            grown, index = self.run_indexer(node, "en", env)
+
+            self.assertEqual(self.folder_line(index, "## `takes/`"),
+                             f"<{FOLDERS}1TaKeSfOlDeRiDaBcDeFgHiJk>")
+            self.assertIn("cite those files through the Drive folder link under its heading, "
+                          "or each file's own Copy link", grown.stdout)
 
     def folder_line(self, index, heading, lang="en"):
         """The folder link line in a heading's section, or None."""
@@ -936,8 +964,8 @@ class IndexLinkColumnTests(unittest.TestCase):
         drive = Path(temp) / "drive"
         (drive / "Setlist.pdf").write_bytes(b"%PDF-1.4")
         (drive / "assets").mkdir()
-        for i in range(13):
-            (drive / "assets" / f"img{i:02}.png").write_bytes(b"\x89PNG")
+        for i in range(COLLAPSE_OVER + 1):
+            (drive / "assets" / f"img{i:03}.png").write_bytes(b"\x89PNG")
         return {drive: self.ROOT_FOLDER_ID, drive / "songs": self.SONGS_FOLDER_ID,
                 drive / "assets": self.ASSETS_FOLDER_ID}
 
@@ -960,7 +988,7 @@ class IndexLinkColumnTests(unittest.TestCase):
                 # Summarised by type, and still linked as a whole.
                 self.assertEqual(self.folder_line(index, "## `assets/`", lang),
                                  f"<{FOLDERS}{self.ASSETS_FOLDER_ID}>")
-                self.assertNotIn("img00.png", index)
+                self.assertNotIn("img000.png", index)
                 self.assertNotIn("previous index", result.stdout)
                 self.assertIn("7 Drive link(s)", result.stdout)    # 4 pointers, 3 folders
 
@@ -987,8 +1015,11 @@ class IndexLinkColumnTests(unittest.TestCase):
                 self.assertIn("2 link(s) kept from the previous index", warning[0])
                 self.assertIn("the root folder", warning[0])
                 self.assertIn("songs/", warning[0])
-                # Folders without a link are not counted with the files that lack one.
-                self.assertNotIn("pictures", result.stdout)
+                # Folders without a link (pictures/) are not counted with the files that
+                # lack one: the stubs that do not read (Deck, Odd, Array, Deep, Pipe), and
+                # Setlist.pdf and Tab.docx, whose ids nobody read, are all there is.
+                unread = 7 if hasattr(os, "mkfifo") else 6
+                self.assertIn(f"\n  {unread} file(s) had no readable Drive id", result.stdout)
 
     def test_a_folder_still_uploading_gets_no_line(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -1003,15 +1034,103 @@ class IndexLinkColumnTests(unittest.TestCase):
             self.assertIn("1 item(s) still uploading", result.stdout)
             self.assertIn(": songs/.", result.stdout)
 
+    def test_a_temporary_id_in_a_stub_or_the_previous_index_is_never_written(self):
+        with tempfile.TemporaryDirectory() as temp:
+            node = self.build(temp)
+            drive = Path(temp) / "drive"
+            (drive / "New.gdoc").write_text(json.dumps({"doc_id": "local-1234567890abc"}),
+                                            encoding="utf-8")
+            (drive / "Setlist.pdf").write_bytes(b"%PDF-1.4")
+            (node / "docs" / "index.md").write_text("\n".join([
+                "## Root", "",
+                f"Drive folder: <{FOLDERS}local-RoOtFoLdEr1>", "",
+                "| File | Type | Size | Link |", "|---|---|---|---|",
+                "| `Setlist.pdf` | pdf | 8 B | <https://drive.google.com/file/d/local-12345/view> |",
+                "",
+                "## `songs/`", "",
+                "| File | Type | Size | Link |", "|---|---|---|---|",
+                f"| `Tab.docx` | docx | 11 B | {self.file_url(self.FILE_ID)} |", "",
+                "## Google pointers to deal with", "",
+                "| File | Kind | Link |", "|---|---|---|",
+                "| `Deck.gslides` | Google Slides | <https://drive.google.com/open?id=local-99999> |",
+                "",
+            ]), encoding="utf-8")
+
+            result, index = self.run_indexer(node, "en", fake_xattr_env(
+                temp, {drive: "local-RoOtFoLdEr1", drive / "Setlist.pdf": "local-12345"}))
+
+            self.assertNotIn("local-", index)
+            self.assertEqual(self.row(index, "New.gdoc")[-1], "")
+            self.assertEqual(self.row(index, "Setlist.pdf")[-1], "")
+            self.assertEqual(self.row(index, "Deck.gslides")[-1], "")
+            self.assertIsNone(self.folder_line(index, "## Root"))
+            # A real link beside them is still kept.
+            self.assertEqual(self.row(index, "Tab.docx")[-1], self.file_url(self.FILE_ID))
+            self.assertIn("2 item(s) still uploading", result.stdout)
+            self.assertIn(": the root folder, Setlist.pdf.", result.stdout)
+            self.assertIn("1 link(s) kept from the previous index", result.stdout)
+
+    def test_folder_lines_follow_the_same_reading_rules_as_rows(self):
+        composed = unicodedata.normalize("NFC", "Canción")
+        decomposed = unicodedata.normalize("NFD", "Canción")
+        with tempfile.TemporaryDirectory() as temp:
+            node = self.build(temp)
+            drive = Path(temp) / "drive"
+            (drive / composed).mkdir()
+            (drive / composed / "a.pdf").write_bytes(b"%PDF-1.4")
+            (node / "docs" / "index.md").write_text("\n".join([
+                # Listed decomposed, as macOS may have written it: still the same folder.
+                f"## `{decomposed}/`", "",
+                f"Drive folder: <{FOLDERS}{self.ROOT_FOLDER_ID}>", "",
+                # Two lines naming one folder: neither can be told to be the right one.
+                "## `songs/`", "",
+                f"Drive folder: <{FOLDERS}{self.SONGS_FOLDER_ID}>",
+                f"Carpeta en Drive: <{FOLDERS}{self.ASSETS_FOLDER_ID}>", "",
+                # A file's link is never a folder's: `songs` the file is not `songs/`.
+                "## Root", "",
+                "| File | Type | Size | Link |", "|---|---|---|---|",
+                f"| `songs` | — | 1 B | {self.file_url(self.FILE_ID)} |", "",
+            ]), encoding="utf-8")
+
+            result, index = self.run_indexer(node, "en")
+
+            self.assertEqual(self.folder_line(index, f"## `{composed}/`"),
+                             f"<{FOLDERS}{self.ROOT_FOLDER_ID}>")
+            self.assertIsNone(self.folder_line(index, "## `songs/`"))
+            self.assertNotIn(self.SONGS_FOLDER_ID, index)
+            self.assertNotIn(self.FILE_ID, index)
+            self.assertIn("1 link(s) kept from the previous index", result.stdout)
+
+    def test_a_line_separator_in_a_folder_name_moves_no_link(self):
+        # The index is written one line per "\n"; a name may hold U+2028, which other
+        # line splitting would read as a new heading for another folder.
+        odd = "x\u2028## `b"
+        with tempfile.TemporaryDirectory() as temp:
+            node = self.build(temp)
+            drive = Path(temp) / "drive"
+            for name in (odd, "b"):
+                (drive / name).mkdir()
+                (drive / name / "Tab.docx").write_bytes(b"ab")
+            self.run_indexer(node, "en", fake_xattr_env(temp, {
+                drive / odd: self.ROOT_FOLDER_ID, drive / odd / "Tab.docx": self.FILE_ID}))
+
+            _, index = self.run_indexer(node, "en")
+
+            self.assertIsNone(self.folder_line(index, "## `b/`"))
+            b = index.split("\n## `b/`\n", 1)[1].split("\n## ", 1)[0]
+            self.assertNotIn(self.FILE_ID, b)
+            self.assertEqual(index.count(self.ROOT_FOLDER_ID), 1)
+            self.assertEqual(index.count(self.FILE_ID), 1)
+
     def test_collapsed_folders_ask_for_no_ids_and_have_no_cells(self):
         with tempfile.TemporaryDirectory() as temp:
             node = self.build(temp)
             assets = Path(temp) / "drive" / "assets"
             assets.mkdir()
             answers = {}
-            for i in range(13):
-                (assets / f"img{i:02}.png").write_bytes(b"\x89PNG")
-                answers[assets / f"img{i:02}.png"] = f"1AsSeTiMaGe{i:02}AbCdEfGhIj"
+            for i in range(COLLAPSE_OVER + 1):
+                (assets / f"img{i:03}.png").write_bytes(b"\x89PNG")
+                answers[assets / f"img{i:03}.png"] = f"1AsSeTiMaGe{i:03}AbCdEfGhIj"
 
             env = fake_xattr_env(temp, answers)
 
@@ -1019,10 +1138,10 @@ class IndexLinkColumnTests(unittest.TestCase):
 
             self.assertIn("## `assets/`", index)
             self.assertNotIn("1AsSeTiMaGe", index)
-            self.assertNotIn("img00.png", index)
+            self.assertNotIn("img000.png", index)
             asked = Path(env["FAKE_XATTR_ANSWERS"] + ".log").read_text(encoding="utf-8")
             self.assertIn("Tab.docx", asked)
-            self.assertNotIn("img00.png", asked)
+            self.assertNotIn("img000.png", asked)
 
 
 if __name__ == "__main__":
