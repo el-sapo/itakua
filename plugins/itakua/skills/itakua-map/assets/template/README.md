@@ -6,6 +6,9 @@ tags: []
 # artifacts:                  # uncomment once docs/drive is linked -- see itakua-map
 #   provider: google-drive
 #   root: My Drive/<folder>   # the Drive folder docs/drive points to, as Drive shows it
+#   url: https://drive.google.com/drive/folders/<folder id>
+#                             # optional, the folder's Copy link: the Reader and MCP agents
+#                             # never see docs/, and a path is not a link
 ---
 
 # <Node name>
@@ -27,7 +30,7 @@ tags: []
 |--------|----------------|
 | `notes/` | Distilled knowledge. Mutable with owner approval as understanding improves. |
 | `log/` | Dated raw evidence. Append-only; correct by adding a later entry. |
-| `docs/` | *Optional.* Cloud-synced artifacts + generated `index.md`. Durable writes require owner approval. Once `docs/drive` is linked, declare its Drive folder in the `artifacts:` frontmatter key. Remove this row if unused. |
+| `docs/` | *Optional.* Cloud-synced artifacts + generated `index.md`. Durable writes require owner approval. Once `docs/drive` is linked, declare its Drive folder, and the folder's link, in the `artifacts:` frontmatter key. Remove this row if unused. |
 | `inbox/` | Captured, not yet filed. Anyone may add; text is tracked, other files stay on this machine. Nothing here is a source, nothing processes it unattended, and removing an item needs owner approval. |
 | `<child>/` | *Optional.* A nested node with its own `README.md` — e.g. a project inside a space. |
 
