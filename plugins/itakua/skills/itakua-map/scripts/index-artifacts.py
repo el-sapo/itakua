@@ -34,6 +34,13 @@ never guessed and never carried to another path: a search by name can land on th
 copy, and a wrong link is worse than none. Folders collapsed into a type summary list no
 files, so they have no cells to fill; when that drops links the previous index listed,
 the run says how many.
+
+Every folder heading, listed or summarised, also carries the folder's own Drive link,
+https://drive.google.com/drive/folders/<id>, read from the same attribute on the folder
+under the same rules: the previous index's link for that same folder where none is
+readable, no line at all where neither is. A file in a summarised folder is cited
+through it. Whether Drive for Desktop keeps the attribute on folders is not yet
+confirmed; where it does not, no folder line is written.
 """
 import os, sys, datetime, json, pathlib, re, shutil, subprocess, unicodedata
 
@@ -48,6 +55,7 @@ XATTR_TIMEOUT = 5    # seconds; after one timeout no other file is asked
 TEMPORARY_ID = "local-"
 # A row of an index this script wrote, with a Drive link: `name`, the cells between, link.
 OLD_ROW = re.compile(r"\| `(.+)` \|(.*)\| *<(https://drive\.google\.com/[^\s<>|]+)> *\|")
+FOLDER_URL = "https://drive.google.com/drive/folders/{}"
 
 ES_HINTS = (" que ", " de la ", " para ", " con ", " los ", " las ", " una ", " esta ",
             " como ", " pero ", " porque ", " cuando ", " donde ", " del ", " se ")
@@ -63,6 +71,7 @@ STRINGS = {
         "root_key":   "(raíz)",
         "root_head":  "## Raíz",
         "folder_sub": "*{n} archivos · {size}*",
+        "folder_url": "Carpeta en Drive: <{url}>",
         "collapsed":  "*Carpeta de assets — resumida por tipo.*",
         "th_type":    "| Tipo | Archivos | Tamaño |",
         "th_file":    "| Archivo | Tipo | Tamaño | Enlace |",
@@ -89,6 +98,7 @@ STRINGS = {
         "root_key":   "(root)",
         "root_head":  "## Root",
         "folder_sub": "*{n} files · {size}*",
+        "folder_url": "Drive folder: <{url}>",
         "collapsed":  "*Asset folder — summarised by type.*",
         "th_type":    "| Type | Files | Size |",
         "th_file":    "| File | Type | Size | Link |",
@@ -188,14 +198,33 @@ def file_link(path):
     return f"https://drive.google.com/file/d/{file_id}/view" if file_id else file_id
 
 
+def folder_link(path):
+    """The Drive URL of a folder, from its Drive id: "" or None as for a file."""
+    folder_id = drive_item_id(path)
+    return FOLDER_URL.format(folder_id) if folder_id else folder_id
+
+
+# A folder's line under its heading, in either language, with the link it gives.
+FOLDER_LINE = re.compile("|".join(
+    re.escape(S["folder_url"]).replace(re.escape("{url}"),
+                                       r"(https://drive\.google\.com/drive/folders/[^\s<>|]+)")
+    for S in STRINGS.values()))
+
+
+def folder_key(folder):
+    # How a folder's own link is keyed beside its files' paths: none of those ends in /.
+    return f"{folder}/"
+
+
 def previous_links(index):
     """The Drive link each path had in the index about to be replaced, by NFC path.
 
     Read back from the tables this script writes, in either language: under the root
     heading or a folder's (## `<folder>/`) a row names a file in that folder; under any
-    other heading (the pointer tables) it names its whole path. Only drive.google.com
-    links are kept, each for the path its own row names and no other; a path two rows
-    give different links is ambiguous, and neither is kept.
+    other heading (the pointer tables) it names its whole path. A folder's own line, under
+    its heading, is keyed by folder_key. Only drive.google.com links are kept, each for
+    the path its own row names and no other; a path two rows give different links is
+    ambiguous, and neither is kept.
     """
     try:
         text = pathlib.Path(index).read_text(encoding="utf-8")
@@ -208,6 +237,12 @@ def previous_links(index):
         if line.startswith("## "):
             m = re.fullmatch(r"## `(.+)/`", line)
             folder = m.group(1) if m else "" if line in roots else None
+            continue
+        m = FOLDER_LINE.fullmatch(line)
+        if m and folder is not None:
+            path, url = nfc(folder_key(folder)), next(g for g in m.groups() if g)
+            if links.setdefault(path, url) != url:
+                ambiguous.add(path)
             continue
         m = OLD_ROW.fullmatch(line)
         if not m:
@@ -297,19 +332,21 @@ def main():
     before, linked, kept, unlinked = previous_links(dest), [], [], []
     uploading, dropped = [], {}
 
-    def link(path, url):
+    def link(path, url, shown=None):
+        # `shown` names a folder in the summary; a folder with no link is not counted
+        # as unlinked, since folders may carry no id on any machine.
         if url is None:
             # A temporary id: said apart, so an empty cell is not taken for a machine
             # that cannot read ids.
-            uploading.append(path)
+            uploading.append(shown or path)
         if not url:
             url = before.get(nfc(path), "")
             if url:
-                kept.append(path)
-            elif path not in uploading:
+                kept.append(shown or path)
+            elif not shown and path not in uploading:
                 unlinked.append(path)
         if url:
-            linked.append(path)
+            linked.append(shown or path)
         return url
 
     groups, pointers, total, count = {}, [], 0, 0
@@ -347,6 +384,10 @@ def main():
         sub = sum(s for _, s, *_ in files)
         out += [f"## `{folder}/`" if folder else S["root_head"], "",
                 S["folder_sub"].format(n=len(files), size=human(sub)), ""]
+        url = link(folder_key(folder), folder_link(os.path.join(root, folder)),
+                   shown=f"{folder}/" if folder else "the root folder")
+        if url:
+            out += [S["folder_url"].format(url=url), ""]
         if len(files) > COLLAPSE_OVER:
             # too many to list one by one -- summarise by type
             gone = sum(nfc(path) in before for *_, path, _ in files)
@@ -437,14 +478,15 @@ def main():
               f"macOS, from Drive for Desktop: is it running, the folder available offline?)")
     if uploading:
         more = f", and {len(uploading) - 5} more" if len(uploading) > 5 else ""
-        print(f"  {len(uploading)} file(s) still uploading to Drive, which gave them only a "
+        print(f"  {len(uploading)} item(s) still uploading to Drive, which gave them only a "
               f"temporary id, not written: {', '.join(uploading[:5])}{more}. Regenerate "
               f"the index once Drive shows them synced")
     if dropped:
         folders = ", ".join(f"{f}/" if f else "the root" for f in sorted(dropped))
         print(f"  {sum(dropped.values())} link(s) from the previous index dropped: "
               f"{folders} now hold(s) more than {COLLAPSE_OVER} files, summarised by type "
-              f"with no link cells; cite those files through Drive's Copy link")
+              f"with no link cells; cite those files through the folder's Drive link, or "
+              f"each file's own Copy link")
     if orphans:
         print(f"  🚨 WARNING: {len(orphans)} orphan file(s) ({human(orphan_bytes)}) in "
               f"{docs_dir} are in NEITHER git NOR cloud storage — move them under docs/drive/")

@@ -611,6 +611,7 @@ class IndexLinkColumnTests(unittest.TestCase):
             self.assertEqual(len(tab), 4)
             self.assertEqual(tab[-1], "")
             self.assertIn("| `Tab.docx` | docx | 11 B | |\n", index)   # as before links
+            self.assertNotIn("Drive folder", index)     # no folder id, no line
             self.assertNotIn("owner@example.com", index)
             self.assertIn("4 Drive link(s)", result.stdout)
             self.assertIn("had no readable Drive id", result.stdout)
@@ -703,7 +704,7 @@ class IndexLinkColumnTests(unittest.TestCase):
                               result.stdout)
                 uploading = [l for l in result.stdout.splitlines() if "uploading" in l]
                 self.assertEqual(len(uploading), 1, result.stdout)
-                self.assertIn("1 file(s) still uploading", uploading[0])
+                self.assertIn("1 item(s) still uploading", uploading[0])
                 self.assertIn("songs/Tab.docx", uploading[0])
                 self.assertIn("Regenerate the index once Drive shows them synced",
                               uploading[0])
@@ -721,7 +722,7 @@ class IndexLinkColumnTests(unittest.TestCase):
             self.assertEqual(self.row(index, "Tab.docx")[-1], self.file_url(self.FILE_ID))
             self.assertNotIn(self.NEW_FILE_ID, index)
             self.assertIn("1 link(s) kept from the previous index", result.stdout)
-            self.assertIn("1 file(s) still uploading", result.stdout)
+            self.assertIn("1 item(s) still uploading", result.stdout)
 
     def test_the_kept_links_warning_names_five_paths(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -889,7 +890,9 @@ class IndexLinkColumnTests(unittest.TestCase):
             self.assertEqual(self.row(index, "Tab.docx")[-1], "")
             self.assertEqual(self.row(index, "Zed.pdf")[-1], "")
             asked = Path(env["FAKE_XATTR_ANSWERS"] + ".log").read_text(encoding="utf-8")
-            self.assertEqual(asked.count("\n"), 1, asked)
+            self.assertTrue(asked.endswith(os.path.realpath(songs / "Tab.docx") + "\n"),
+                            asked)
+            self.assertNotIn("Zed.pdf", asked)
             self.assertIn("had no readable Drive id", result.stdout)
 
     def test_links_dropped_by_a_folder_now_summarised_are_counted(self):
@@ -916,8 +919,89 @@ class IndexLinkColumnTests(unittest.TestCase):
             self.assertEqual(len(dropped), 1, grown.stdout)
             self.assertIn("12 link(s) from the previous index dropped: takes/", dropped[0])
             self.assertIn("more than 12 files", dropped[0])
+            self.assertIn("through the folder's Drive link", dropped[0])
             self.assertNotIn("dropped", again.stdout)
             self.assertEqual(third, second)
+
+    def folder_line(self, index, heading, lang="en"):
+        """The folder link line in a heading's section, or None."""
+        section = index.split(f"\n{heading}\n", 1)[1].split("\n## ", 1)[0]
+        label = {"en": "Drive folder: ", "es": "Carpeta en Drive: "}[lang]
+        lines = [l for l in section.splitlines() if l.startswith(label)]
+        assert len(lines) <= 1, section
+        return lines[0][len(label):] if lines else None
+
+    def folders(self, temp):
+        """The stand-in Drive with a root file and a summarised folder, and their ids."""
+        drive = Path(temp) / "drive"
+        (drive / "Setlist.pdf").write_bytes(b"%PDF-1.4")
+        (drive / "assets").mkdir()
+        for i in range(13):
+            (drive / "assets" / f"img{i:02}.png").write_bytes(b"\x89PNG")
+        return {drive: self.ROOT_FOLDER_ID, drive / "songs": self.SONGS_FOLDER_ID,
+                drive / "assets": self.ASSETS_FOLDER_ID}
+
+    ROOT_FOLDER_ID = "1RoOtFoLdErIdAbCdEfGhIjKlM"
+    SONGS_FOLDER_ID = "1SoNgSfOlDeRiDaBcDeFgHiJkL"
+    ASSETS_FOLDER_ID = "1AsSeTsFoLdErIdAbCdEfGhIjK"
+
+    def test_every_folder_heading_carries_its_own_drive_link(self):
+        for lang, root_head in (("en", "## Root"), ("es", "## Raíz")):
+            with self.subTest(lang=lang), tempfile.TemporaryDirectory() as temp:
+                node = self.build(temp)
+                ids = self.folders(temp)
+
+                result, index = self.run_indexer(node, lang, fake_xattr_env(temp, ids))
+
+                self.assertEqual(self.folder_line(index, root_head, lang),
+                                 f"<{FOLDERS}{self.ROOT_FOLDER_ID}>")
+                self.assertEqual(self.folder_line(index, "## `songs/`", lang),
+                                 f"<{FOLDERS}{self.SONGS_FOLDER_ID}>")
+                # Summarised by type, and still linked as a whole.
+                self.assertEqual(self.folder_line(index, "## `assets/`", lang),
+                                 f"<{FOLDERS}{self.ASSETS_FOLDER_ID}>")
+                self.assertNotIn("img00.png", index)
+                self.assertNotIn("previous index", result.stdout)
+                self.assertIn("7 Drive link(s)", result.stdout)    # 4 pointers, 3 folders
+
+    def test_a_folder_link_is_kept_when_unreadable_and_never_moved(self):
+        for before, after in (("en", "es"), ("es", "en")):
+            with self.subTest(before=before), tempfile.TemporaryDirectory() as temp:
+                node = self.build(temp)
+                ids = self.folders(temp)
+                drive = Path(temp) / "drive"
+                self.run_indexer(node, before, fake_xattr_env(temp, ids))
+                (drive / "assets").rename(drive / "pictures")
+
+                result, index = self.run_indexer(node, after)    # no xattr
+
+                root_head = {"en": "## Root", "es": "## Raíz"}[after]
+                self.assertEqual(self.folder_line(index, root_head, after),
+                                 f"<{FOLDERS}{self.ROOT_FOLDER_ID}>")
+                self.assertEqual(self.folder_line(index, "## `songs/`", after),
+                                 f"<{FOLDERS}{self.SONGS_FOLDER_ID}>")
+                self.assertIsNone(self.folder_line(index, "## `pictures/`", after))
+                self.assertNotIn(self.ASSETS_FOLDER_ID, index)
+                warning = [l for l in result.stdout.splitlines() if "WARNING" in l]
+                self.assertEqual(len(warning), 1, result.stdout)
+                self.assertIn("2 link(s) kept from the previous index", warning[0])
+                self.assertIn("the root folder", warning[0])
+                self.assertIn("songs/", warning[0])
+                # Folders without a link are not counted with the files that lack one.
+                self.assertNotIn("pictures", result.stdout)
+
+    def test_a_folder_still_uploading_gets_no_line(self):
+        with tempfile.TemporaryDirectory() as temp:
+            node = self.build(temp)
+            songs = Path(temp) / "drive" / "songs"
+
+            result, index = self.run_indexer(node, "en", fake_xattr_env(
+                temp, {songs: "local-" + self.SONGS_FOLDER_ID}))
+
+            self.assertIsNone(self.folder_line(index, "## `songs/`"))
+            self.assertNotIn("local-", index)
+            self.assertIn("1 item(s) still uploading", result.stdout)
+            self.assertIn(": songs/.", result.stdout)
 
     def test_collapsed_folders_ask_for_no_ids_and_have_no_cells(self):
         with tempfile.TemporaryDirectory() as temp:
