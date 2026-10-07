@@ -23,16 +23,43 @@ LINKS: every per-file table carries a Link column, because the Reader and agents
 server cannot open docs/ -- only Drive can -- so a note that cites an artifact someone
 will open carries its Drive URL, and this index is where to copy it from. Google pointer
 files (.gdoc, .gsheet, .gslides) hold their Drive file id on disk, so their link is
-exact. No other file does, and its cell stays EMPTY: a search by name can land on the
-wrong copy, and a wrong link is worse than none. A pass over the Drive API could fill
-those cells later, if it ever proves worth the credentials it needs. Folders collapsed
-into a type summary list no files, so they have no cells to fill.
-"""
-import os, sys, datetime, json, pathlib, re
+exact. Any other file's id comes, with no Drive API call, from the extended attribute
+Drive for Desktop keeps on it on macOS (com.google.drivefs.item-id#S), and its link is
+https://drive.google.com/file/d/<id>/view. Where no id can be read -- another OS, Drive
+not running, a pointer stub still streaming, a file still uploading, whose temporary id
+(local-...) would be a dead link -- the cell keeps the link the previous docs/index.md
+had for that same path, with a warning, so regenerating on a machine that cannot read
+ids never blanks links another machine wrote. Failing that it stays EMPTY. A link is
+never guessed and never carried to another path: a search by name can land on the wrong
+copy, and a wrong link is worse than none. Folders collapsed into a type summary list no
+files, so they have no cells to fill; when that drops links the previous index listed,
+the run says how many.
 
-COLLAPSE_OVER = 12   # folders bigger than this are summarised by type
+Every folder heading, listed or summarised, also carries the folder's own Drive link,
+https://drive.google.com/drive/folders/<id>, read from the same attribute on the folder
+under the same rules: the previous index's link for that same folder where none is
+readable, no line at all where neither is. A file in a summarised folder is cited
+through it. Whether Drive for Desktop keeps the attribute on folders is not yet
+confirmed; where it does not, no folder line is written.
+"""
+import os, sys, datetime, json, pathlib, re, shutil, subprocess, unicodedata
+
+# A folder with more files than this is summarised by type rather than listed file by
+# file. Only real asset dumps should reach it; the number lives here and nowhere else.
+COLLAPSE_OVER = 50
 POINTERS = {".gdoc": "Google Doc", ".gsheet": "Google Sheet", ".gslides": "Google Slides"}
 DRIVE_ID = re.compile(r"[A-Za-z0-9_-]{10,}")
+# Where Drive for Desktop on macOS keeps a synced file's Drive id.
+ITEM_ID_XATTR = "com.google.drivefs.item-id#S"
+XATTR_TIMEOUT = 5    # seconds; after one timeout no other file is asked
+# How Drive for Desktop is reported to mark the id of an item that has not finished
+# uploading. No real Drive id starts this way, so such a value is never written: not
+# from the attribute, a pointer stub, or a link the previous index carried.
+TEMPORARY_ID = "local-"
+TEMPORARY_LINK = re.compile(r"(?:/d/|/folders/|[?&]id=)" + re.escape(TEMPORARY_ID))
+# A row of an index this script wrote, with a Drive link: `name`, the cells between, link.
+OLD_ROW = re.compile(r"\| `(.+)` \|(.*)\| *<(https://drive\.google\.com/[^\s<>|]+)> *\|")
+FOLDER_URL = "https://drive.google.com/drive/folders/{}"
 
 ES_HINTS = (" que ", " de la ", " para ", " con ", " los ", " las ", " una ", " esta ",
             " como ", " pero ", " porque ", " cuando ", " donde ", " del ", " se ")
@@ -48,6 +75,7 @@ STRINGS = {
         "root_key":   "(raíz)",
         "root_head":  "## Raíz",
         "folder_sub": "*{n} archivos · {size}*",
+        "folder_url": "Carpeta en Drive: <{url}>",
         "collapsed":  "*Carpeta de assets — resumida por tipo.*",
         "th_type":    "| Tipo | Archivos | Tamaño |",
         "th_file":    "| Archivo | Tipo | Tamaño | Enlace |",
@@ -74,6 +102,7 @@ STRINGS = {
         "root_key":   "(root)",
         "root_head":  "## Root",
         "folder_sub": "*{n} files · {size}*",
+        "folder_url": "Drive folder: <{url}>",
         "collapsed":  "*Asset folder — summarised by type.*",
         "th_type":    "| Type | Files | Size |",
         "th_file":    "| File | Type | Size | Link |",
@@ -125,13 +154,126 @@ def pointer_link(path):
         m = re.fullmatch(r"(?:document|spreadsheet|presentation):(.+)", rid) \
             if isinstance(rid, str) else None
         file_id = m.group(1) if m else ""
-    if not DRIVE_ID.fullmatch(file_id):
+    if not DRIVE_ID.fullmatch(file_id) or file_id.startswith(TEMPORARY_ID):
         return ""
     url = f"https://drive.google.com/open?id={file_id}"
     key = data.get("resource_key")
     if isinstance(key, str) and re.fullmatch(r"[A-Za-z0-9_-]+", key):
         url += f"&resourcekey={key}"
     return url
+
+
+xattr_cmd = shutil.which("xattr")    # Apple's; without one, no file's id is read
+
+
+def drive_item_id(path):
+    """The Drive id Drive for Desktop keeps on a synced file, "", or None while uploading.
+
+    Read with xattr on the resolved path, so nothing depends on xattr following a
+    symlink. No command, no attribute, an error or an answer not shaped like a Drive id
+    all give "", never a guess. A temporary id (local-...) gives None: the file is still
+    uploading, and the id it will have is not known yet. A timeout means Drive is not
+    answering: the files after it are not asked, and keep their previous links instead.
+    """
+    global xattr_cmd
+    if not xattr_cmd:
+        return ""
+    try:
+        result = subprocess.run((xattr_cmd, "-p", ITEM_ID_XATTR, os.path.realpath(path)),
+                                stdin=subprocess.DEVNULL, capture_output=True,
+                                timeout=XATTR_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        xattr_cmd = None
+        return ""
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return ""
+    value = result.stdout.decode("utf-8", "replace").strip()
+    if result.returncode != 0:
+        return ""
+    if value.startswith(TEMPORARY_ID):
+        return None
+    return value if DRIVE_ID.fullmatch(value) else ""
+
+
+def file_link(path):
+    """The Drive URL of a file that is not a Google pointer, from its Drive id: "" when
+    none is readable, None while the file is still uploading."""
+    file_id = drive_item_id(path)
+    return f"https://drive.google.com/file/d/{file_id}/view" if file_id else file_id
+
+
+def folder_link(path):
+    """The Drive URL of a folder, from its Drive id: "" or None as for a file."""
+    folder_id = drive_item_id(path)
+    return FOLDER_URL.format(folder_id) if folder_id else folder_id
+
+
+# A folder's line under its heading, in either language, with the link it gives.
+FOLDER_LINE = re.compile("|".join(
+    re.escape(S["folder_url"]).replace(re.escape("{url}"),
+                                       r"(https://drive\.google\.com/drive/folders/[^\s<>|]+)")
+    for S in STRINGS.values()))
+
+
+def folder_key(folder):
+    # How a folder's own link is keyed beside its files' paths: none of those ends in /.
+    return f"{folder}/"
+
+
+def previous_links(index):
+    """The Drive link each path had in the index about to be replaced, by NFC path.
+
+    Read back from the tables this script writes, in either language: under the root
+    heading or a folder's (## `<folder>/`) a row names a file in that folder; under any
+    other heading (the pointer tables) it names its whole path. A folder's own line, under
+    its heading, is keyed by folder_key. Only drive.google.com links are kept, each for
+    the path its own row names and no other, and none carrying a temporary id; a path two
+    rows give different links is ambiguous, and neither is kept. Lines are split as they
+    were written, on newlines only, so no character inside a name starts a new one.
+    """
+    try:
+        text = pathlib.Path(index).read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        return {}
+    roots = {S["root_head"] for S in STRINGS.values()}
+    links, ambiguous, folder = {}, set(), None
+    for line in text.split("\n"):
+        line = line.rstrip()
+        if line.startswith("## "):
+            m = re.fullmatch(r"## `(.+)/`", line)
+            folder = m.group(1) if m else "" if line in roots else None
+            continue
+        m = FOLDER_LINE.fullmatch(line)
+        if m and folder is not None:
+            path, url = nfc(folder_key(folder)), next(g for g in m.groups() if g)
+            if TEMPORARY_LINK.search(url):
+                continue
+            if links.setdefault(path, url) != url:
+                ambiguous.add(path)
+            continue
+        m = OLD_ROW.fullmatch(line)
+        if not m:
+            continue
+        name, between, url = m.groups()
+        # File | Kind | Link in the pointer tables; File | Type | Size | Link under a
+        # folder, where Type is the file's extension and may hold a | of its own.
+        if folder is None and "|" not in between:
+            path = name
+        elif folder is not None and "|" in between:
+            path = f"{folder}/{name}" if folder else name
+        else:
+            continue
+        path = nfc(path)
+        if TEMPORARY_LINK.search(url):
+            continue
+        if links.setdefault(path, url) != url:
+            ambiguous.add(path)
+    return {path: url for path, url in links.items() if path not in ambiguous}
+
+
+def nfc(text):
+    # macOS may hand back decomposed names; the previous index may hold either form.
+    return unicodedata.normalize("NFC", text)
 
 
 def link_cell(url):
@@ -192,6 +334,29 @@ def main():
     detected = lang or detect_language(node)
     S = STRINGS[detected]
     today = datetime.date.today()
+    dest = os.path.join(node, "docs", "index.md")
+
+    # A cell with no readable id keeps the link the index being replaced had for that
+    # same path: this machine not reading ids is no reason to blank another machine's.
+    before, linked, kept, unlinked = previous_links(dest), [], [], []
+    uploading, dropped = [], {}
+
+    def link(path, url, shown=None):
+        # `shown` names a folder in the summary; a folder with no link is not counted
+        # as unlinked, since folders may carry no id on any machine.
+        if url is None:
+            # A temporary id: said apart, so an empty cell is not taken for a machine
+            # that cannot read ids.
+            uploading.append(shown or path)
+        if not url:
+            url = before.get(nfc(path), "")
+            if url:
+                kept.append(shown or path)
+            elif not shown and path not in uploading:
+                unlinked.append(path)
+        if url:
+            linked.append(shown or path)
+        return url
 
     groups, pointers, total, count = {}, [], 0, 0
     for dirpath, dirnames, filenames in os.walk(root):
@@ -204,12 +369,16 @@ def main():
             ext = pathlib.Path(fn).suffix.lower()
             size = os.path.getsize(os.path.join(dirpath, fn))
             count += 1
+            path = os.path.join(rel, fn) if rel else fn
             if ext in POINTERS:
-                pointers.append((os.path.join(rel, fn) if rel else fn, POINTERS[ext],
-                                 pointer_link(os.path.join(dirpath, fn))))
+                pointers.append((path, POINTERS[ext],
+                                 link(path, pointer_link(os.path.join(dirpath, fn)))))
                 continue
             total += size
-            groups.setdefault(rel or S["root_key"], []).append((fn, size, ext))
+            # The root is keyed "", which no folder can be named: a folder called
+            # "(root)" keeps its own heading, and no file is listed under the wrong one.
+            groups.setdefault(rel, []).append(
+                (fn, size, ext, path, os.path.join(dirpath, fn)))
 
     out = [
         "---", "type: note", f"domain: {domain_of(node)}",
@@ -219,15 +388,22 @@ def main():
         S["generated"].format(node=node), "",
         S["summary"].format(count=count, size=human(total), date=today), "",
     ]
-    for folder in sorted(groups):
+    for folder in sorted(groups, key=lambda f: f or S["root_key"]):
         files = groups[folder]
-        sub = sum(s for _, s, _ in files)
-        out += [f"## `{folder}/`" if folder != S["root_key"] else S["root_head"], "",
+        sub = sum(s for _, s, *_ in files)
+        out += [f"## `{folder}/`" if folder else S["root_head"], "",
                 S["folder_sub"].format(n=len(files), size=human(sub)), ""]
+        url = link(folder_key(folder), folder_link(os.path.join(root, folder)),
+                   shown=f"{folder}/" if folder else "the root folder")
+        if url:
+            out += [S["folder_url"].format(url=url), ""]
         if len(files) > COLLAPSE_OVER:
             # too many to list one by one -- summarise by type
+            gone = sum(nfc(path) in before for *_, path, _ in files)
+            if gone:
+                dropped[folder] = (gone, bool(url))
             byext = {}
-            for fn, size, ext in files:
+            for fn, size, ext, *_ in files:
                 e = ext.lstrip(".") or "—"
                 n, s = byext.get(e, (0, 0))
                 byext[e] = (n + 1, s + size)
@@ -236,10 +412,12 @@ def main():
                 n, s = byext[e]
                 out.append(f"| {e} | {n} | {human(s)} |")
         else:
-            # No file id on disk outside pointer files: the link cell stays empty.
+            # Ids are read only for files listed one by one: a collapsed folder has no cells.
             out += [S["th_file"], "|---|---|---|---|"]
-            for fn, size, ext in files:
-                out.append(f"| `{fn}` | {ext.lstrip('.') or '—'} | {human(size)} | |")
+            for fn, size, ext, path, full in files:
+                url = link(path, file_link(full))
+                row = f"| `{fn}` | {ext.lstrip('.') or '—'} | {human(size)} |"
+                out.append(f"{row} {link_cell(url)} |" if url else f"{row} |")
         out.append("")
 
     # Pointers deliberately left as Google files are listed in docs/pointers-ok.md.
@@ -295,15 +473,33 @@ def main():
             out.append(S["orph_more"].format(n=len(orphans) - 15))
         out.append("")
 
-    dest = os.path.join(node, "docs", "index.md")
     pathlib.Path(dest).write_text("\n".join(out), encoding="utf-8")
     how = "forced" if lang else "detected"
-    linked = sum(1 for p in pointers if p[2])
     print(f"wrote {dest} [{detected}, {how}]: {count} files, {len(todo)} pointers to "
-          f"migrate ({len(ok)} accepted), {linked} Drive link(s), {human(total)}")
-    if linked < len(pointers):
-        print(f"  {len(pointers) - linked} pointer(s) had no readable Drive id; their "
-              f"link cells are empty (is the folder Available offline?)")
+          f"migrate ({len(ok)} accepted), {len(linked)} Drive link(s), {human(total)}")
+    if kept:
+        more = f", and {len(kept) - 5} more" if len(kept) > 5 else ""
+        print(f"  WARNING: {len(kept)} link(s) kept from the previous index, not checked "
+              f"here: no Drive id was readable for {', '.join(kept[:5])}{more}")
+    if unlinked:
+        print(f"  {len(unlinked)} file(s) had no readable Drive id and no earlier link; "
+              f"their link cells are empty (ids come from Google pointer stubs and, on "
+              f"macOS, from Drive for Desktop: is it running, the folder available offline?)")
+    if uploading:
+        more = f", and {len(uploading) - 5} more" if len(uploading) > 5 else ""
+        print(f"  {len(uploading)} item(s) still uploading to Drive, which gave them only a "
+              f"temporary id, not written: {', '.join(uploading[:5])}{more}. Regenerate "
+              f"the index once Drive shows them synced")
+    if dropped:
+        folders = ", ".join(f"{f}/" if f else "the root" for f in sorted(dropped))
+        with_line = [has for _, has in dropped.values()]
+        through = ("the Drive folder link under its heading, or " if all(with_line) else
+                   "the Drive folder link under its heading where the index has one, or "
+                   if any(with_line) else "")
+        print(f"  {sum(n for n, _ in dropped.values())} link(s) from the previous index "
+              f"dropped: {folders} now hold(s) more than {COLLAPSE_OVER} files, summarised "
+              f"by type with no link cells; cite those files through {through}each file's "
+              f"own Copy link")
     if orphans:
         print(f"  🚨 WARNING: {len(orphans)} orphan file(s) ({human(orphan_bytes)}) in "
               f"{docs_dir} are in NEITHER git NOR cloud storage — move them under docs/drive/")

@@ -108,9 +108,11 @@ file. If the local cloud mirror is invisible to the agent, give the exact termin
 to the owner instead of approximating the path.
 
 A linked node also declares its Drive folder in the README `artifacts:` key that
-`itakua-map` defines, for readers that cannot follow the symlink. After linking, run the
-map validator: it proposes the `root` from this machine's mapping. Writing the key is a
-README edit and needs owner approval.
+`itakua-map` defines, for readers that cannot follow the symlink: its `root`, and
+optionally its `url`, the folder's link. After linking, run the map validator: it proposes
+the `root` from this machine's mapping, and the `url` where this machine can read the
+folder's Drive id; otherwise the link comes from Drive's *Copy link* on the folder.
+Writing the key is a README edit and needs owner approval.
 
 ## Script ownership
 

@@ -14,7 +14,12 @@ not a node is still a problem: that is a node missing its README.
 A node whose docs/drive is linked declares where that folder lives in Drive with an
 `artifacts:` key in its README frontmatter. Readers that cannot follow the symlink -- the
 Reader, an agent on the MCP server -- have nothing else to go on. A missing, stale or
-orphaned key is a WARNING: the key is optional, and a fresh clone has it before the link.
+orphaned key is a WARNING: the key is optional; a fresh clone has it before the symlink.
+Its optional `url` is the folder's Drive link, because a path is not one. On macOS, Drive
+for Desktop may keep the folder's Drive id in the com.google.drivefs.item-id#S attribute;
+where this machine can read it, a missing url is proposed and a contradicting one warned.
+Where it cannot -- Drive not running, another OS, a folder that does not carry it --
+nothing is said about url beyond the shape of a declared one.
 
 The git section exists because the structure was never the part that could hurt you.
 A brain declares bindings in its root README -- remote, identity -- and those are the
@@ -30,7 +35,7 @@ plus each node's inbox, undistilled log entries, limbo and machine-local files, 
 static page from assets/status-page.html. Without it the validator writes nothing.
 """
 import os, sys, json, pathlib, re, subprocess, unicodedata, datetime, html, platform
-import string
+import shutil, string, urllib.parse
 
 SLOTS = ("notes", "log", "docs", "inbox")
 LEGACY = "_tmp"                  # the slot inbox/ replaced in 0.5.0
@@ -391,6 +396,15 @@ PROVIDERS = ("google-drive",)
 DRIVE_ANCHORS = ("My Drive", "Shared drives")
 # Characters YAML will not take raw in a plain or single-quoted scalar, plus surrogates.
 UNPRINTABLE = re.compile("[\x00-\x1f\x7f-\x9f\u2028\u2029\ud800-\udfff]")
+# A Drive id, as index-artifacts.py reads one, and the folder link a reader opens.
+DRIVE_ID = re.compile(r"[A-Za-z0-9_-]{10,}")
+FOLDER_URL = "https://drive.google.com/drive/folders/{}"
+# Where Drive for Desktop on macOS keeps a synced item's Drive id.
+ITEM_ID_XATTR = "com.google.drivefs.item-id#S"
+XATTR_TIMEOUT = 5                # seconds; a slower answer counts as none
+# How Drive for Desktop is reported to mark the id of an item still uploading. No real
+# Drive id starts this way; one that did would be a link that opens nothing.
+TEMPORARY_ID = "local-"
 
 
 def nfc(text):
@@ -451,7 +465,7 @@ def yaml_scalar(value):
 def declared_artifacts(text):
     """The README's `artifacts:` fields as a dict, or None when the key is absent.
 
-    Not a YAML parser, on purpose: frontmatter stays flat apart from this one two-field
+    Not a YAML parser, on purpose: frontmatter stays flat apart from this one small
     block, and the validator has to run on a bare python3. A form it cannot read comes
     back without `root`, which is reported rather than guessed at.
     """
@@ -519,6 +533,80 @@ def mapped_root(node, drive):
     return None, None
 
 
+def drive_item_id(path):
+    """The Drive id Drive for Desktop keeps on `path`, or None when it cannot be read.
+
+    On macOS it is the extended attribute com.google.drivefs.item-id#S, read with Apple's
+    xattr on the resolved path, so nothing depends on xattr following a symlink. That is
+    confirmed for files, not yet for folders, so None is an ordinary answer: no command,
+    no Drive, no attribute, an error, a timeout, an answer not shaped like a Drive id, or
+    a temporary one (local-...) for an item still uploading. None of those is ever output.
+    """
+    xattr = shutil.which("xattr")
+    if not xattr:
+        return None
+    try:
+        result = subprocess.run((xattr, "-p", ITEM_ID_XATTR, os.path.realpath(path)),
+                                stdin=subprocess.DEVNULL, capture_output=True,
+                                timeout=XATTR_TIMEOUT)
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return None
+    value = result.stdout.decode("utf-8", "replace").strip()
+    if result.returncode != 0 or value.startswith(TEMPORARY_ID):
+        return None
+    return value if DRIVE_ID.fullmatch(value) else None
+
+
+def folder_link_id(url):
+    """The folder id in a declared `artifacts.url`, or (None, what is wrong with it).
+
+    Drive's Copy link on a folder gives https://drive.google.com/drive/folders/<id>,
+    sometimes with /u/<n>/ before `folders` and a query (?usp=sharing, ?usp=drive_link,
+    resourcekey=); all of those read. Anything else is reported, and never compared.
+    """
+    if url is None:
+        return None, "cannot be read"
+    if "<" in url or ">" in url:
+        return None, f"is still a placeholder: {url}"
+    try:
+        parts = urllib.parse.urlsplit(url)
+    except ValueError:
+        return None, f"is not a Drive folder link: {url}"
+    if parts.scheme.lower() != "https":
+        return None, f"is not an https link: {url}"
+    path = re.fullmatch(r"/drive/(?:u/\d+/)?folders(?:/([^/]*))?/?", parts.path)
+    if parts.netloc.lower() != "drive.google.com" or not path or UNPRINTABLE.search(url):
+        return None, f"is not a Drive folder link: {url}"
+    if not DRIVE_ID.fullmatch(path.group(1) or ""):
+        return None, f"carries no folder id: {url}"
+    return path.group(1), None
+
+
+def check_artifact_url(declared, readme, drive, folder, at):
+    """Compare a declared `artifacts.url` with the Drive id of the folder docs/drive
+    points to, `folder`. A missing url is only a note, and only where that id is
+    readable: the key is optional, the owner may leave it out on purpose, and a url is
+    never guessed. A url that is unusable or names another folder is a warning."""
+    url = declared.get("url", "")
+    if url == "":
+        if folder:
+            note(f"{readme} `artifacts:` has no `url` (optional); from the Drive id of the "
+                 f"folder {drive} points to, it would be `url: {FOLDER_URL.format(folder)}`. "
+                 f"Adding it is a README edit: owner approval", node=at)
+        return
+    declared_id, wrong = folder_link_id(url)
+    if wrong:
+        fix = (f"; from the Drive id of the folder {drive} points to, propose "
+               f"`url: {FOLDER_URL.format(folder)}`" if folder else
+               "; take it from Drive's Copy link on the folder itself")
+        warn(f"{readme} `artifacts.url` {wrong}{fix}. Correcting it is a README edit: "
+             f"owner approval", node=at)
+    elif folder and declared_id != folder:
+        warn(f"{readme} declares `artifacts.url` for Drive folder {declared_id}, but the "
+             f"folder {drive} points to has id {folder} -- correct whichever is stale, "
+             f"with owner approval", node=at)
+
+
 def check_artifact_store(found):
     """Compare each README's `artifacts:` key with the node's docs/drive link."""
     for n in found:
@@ -526,6 +614,7 @@ def check_artifact_store(found):
         declared = declared_artifacts(readme.read_text(encoding="utf-8"))
         drive = n / "docs" / "drive"
         root, source = mapped_root(n, drive)
+        folder = drive_item_id(drive) if drive.is_symlink() and drive.is_dir() else None
         at = key(n)
         if root:
             fact(at)["drive_root"] = root
@@ -536,6 +625,9 @@ def check_artifact_store(found):
                             f"`root: {yaml_scalar(root)}`" if root else
                             "; set `root` to the Drive folder docs/drive points to, as "
                             "Drive shows it")
+                if folder:
+                    proposal += (f"; from that folder's Drive id, "
+                                 f"`url: {FOLDER_URL.format(folder)}`")
                 warn(f"{n}/ has docs/drive but {readme} declares no `artifacts:` "
                      f"key{proposal}. Adding it is a README edit: owner approval", node=at)
             continue
@@ -545,7 +637,7 @@ def check_artifact_store(found):
         fact(at)["artifacts"] = declared_root
         if not declared_root:
             warn(f"{readme} has an `artifacts:` key with no readable `root` -- use the "
-                 f"two-line block form the itakua-map skill defines, indented with spaces, "
+                 f"block form the itakua-map skill defines, indented with spaces, "
                  f"quoting a value with `: ` or ` #` in it", node=at)
         elif "<" in declared_root or ">" in declared_root:
             warn(f"{readme} `artifacts.root` is still a placeholder: {declared_root}",
@@ -563,6 +655,7 @@ def check_artifact_store(found):
             warn(f"{readme} declares `artifacts.root: {declared_root}`, but {source} "
                  f"gives `root: {yaml_scalar(root)}` -- correct whichever is stale, with "
                  f"owner approval", node=at)
+        check_artifact_url(declared, readme, drive, folder, at)
 
 
 # --- git state -------------------------------------------------------------------

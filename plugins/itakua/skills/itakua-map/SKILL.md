@@ -62,8 +62,8 @@ sprawling:
   READMEs and `drive-map` travel with the clone. `docs/drive` symlinks and the binaries
   in `inbox/` are per-machine. The validator makes a missing artifact attachment visible;
   the cloud data itself is not lost. A README's `artifacts:` key travels too: it is how
-  readers that cannot follow the symlink learn where `docs/` lives in Drive (see
-  **Frontmatter**).
+  readers that cannot follow the symlink learn where `docs/` lives in Drive, and how to
+  open it (see **Frontmatter**).
 
 `notes/` and `log/` are required. New nodes also create `inbox/`; existing or
 deliberately minimal nodes may omit it. `docs/` is optional. A README lists only the
@@ -390,7 +390,8 @@ back only when a script actually needs to read it, and only where that script lo
 across the repo, so its set of values stays small.
 
 Keep frontmatter flat. Complex YAML is a known parse-failure source. The one exception is
-`artifacts:` below: a fixed two-field block on node READMEs. Nothing else nests.
+`artifacts:` below: a fixed block on node READMEs, two fields and an optional third.
+Nothing else nests.
 
 ### `artifacts:` — where a node's `docs/` lives in Drive
 
@@ -400,6 +401,7 @@ A node README whose `docs/drive` is linked declares the Drive folder behind it:
 artifacts:
   provider: google-drive
   root: My Drive/Guitarra
+  url: https://drive.google.com/drive/folders/<folder id>
 ```
 
 **Why it exists.** Only the owner's machine can follow `docs/drive`. The symlink is
@@ -408,6 +410,9 @@ through the read-only MCP server get notes and READMEs, never `docs/`. Only Driv
 open those files. Without the key, an agent has to infer from README prose which Drive
 folder `docs/` is, then hunt for a cited file by title. With it, the handoff is explicit:
 an agent with its own Drive connector opens a cited artifact there, and that is intended.
+A path is not a link, though: a reader that offers a node's Drive documents as links to
+open — the Reader, an agent on the MCP server — cannot turn `My Drive/Guitarra` into one
+without the folder's Drive id. `url` carries it.
 
 - **Optional.** Only a node with a `docs/drive` link carries it. Every other node omits
   it — no empty `artifacts:`.
@@ -418,8 +423,18 @@ an agent with its own Drive connector opens a cited artifact there, and that is 
   `check-structure.py` proposes the value from this machine's mapping and warns when the
   key and that mapping disagree. Quote it when the folder name holds `: ` or ` #`
   (`root: 'My Drive/Setlist #2'`); the validator's proposal already does.
-- The key travels with the clone; the link does not. A fresh clone with the key and no
-  link is the cue to load `itakua-setup`.
+- `url` is optional: the folder's Drive link. `root` stays the name a person reads; `url`
+  is where a reader opens it. It is never guessed. Take it from Drive's *Copy link* on the
+  folder (a `?usp=sharing` tail is fine). On macOS, Drive for Desktop keeps a synced item's
+  Drive id in the `com.google.drivefs.item-id#S` extended attribute — confirmed for files,
+  not yet for folders. Where this machine can read the folder's, `check-structure.py`
+  proposes a missing `url` in a note, never a warning, since the owner may leave it out on
+  purpose, and warns when the declared one names another folder; where it cannot, it only
+  checks that a declared `url` is a Drive folder link, and the link comes from *Copy link*.
+  An item still uploading is reported to carry a temporary id starting `local-`; neither
+  script ever turns one into a link.
+- The key travels with the clone; the `docs/drive` symlink does not. A fresh clone with
+  the key and no symlink is the cue to load `itakua-setup`.
 - Writing it is a README edit, so it needs owner approval.
 
 ## Citing an artifact
@@ -441,9 +456,19 @@ depends on whether anyone will want to open it.
 - **It is only context** — provenance, the source a note was distilled from: a path-only
   citation is fine.
 
-Take the URL from the generated `docs/index.md`, which carries it for Google pointer files,
-from Drive's *Copy link*, or from an agent's own Drive connector. Never build one from a
+Take the URL from the generated `docs/index.md`, which carries it for Google pointer files
+and for every other listed file whose Drive id the indexing machine could read, from
+Drive's *Copy link*, or from an agent's own Drive connector. Never build one from a
 guessed id. Adding a URL to an existing note is a `notes/` edit and needs owner approval.
+
+A folder with more files than `COLLAPSE_OVER` (a constant in `index-artifacts.py`) is
+summarised by type in the index, so its files have no rows and no links of their own. The index gives each folder heading the folder's own link where
+its Drive id could be read: cite such a file through it, with the folder's `docs/` path as
+the link text, or take the file's link from Drive's *Copy link*.
+
+```markdown
+Mockups in [`docs/drive/design/`](https://drive.google.com/drive/folders/<id>).
+```
 
 ## When a node goes dormant
 
@@ -508,8 +533,8 @@ context, that is the moment to build one — not before.
 | Script | Does |
 |---|---|
 | `new-node.sh` | Safely scaffolds a node with `notes/`, `log/`, `inbox/`, and the README template, without overwriting existing files |
-| `check-structure.py` | Validates every node and its local artifact attachment, warns when a linked node's README lacks the `artifacts:` key, declares it without a link, or names a `root` this machine's mapping contradicts (proposing the `root` from that mapping), **and** checks the repository's git state — remote, identity — against the bindings declared in the root README. Notes limbo folders, a leftover `_tmp/`, each node's inbox count and oldest item, and the files that exist only on this machine; warns on tracked files over 1 MB in a slot and on a `.gitignore` that would commit inbox binaries. A git query that fails or times out is a warning, and what it would have counted shows as not checked, never as zero. `--no-git` skips every git query. `--report` also writes `status.html` at the brain root: one static dashboard that opens offline, with the verdict and totals, problems and warnings first, every node's counts in one table, and notes that differ only by node folded into one line; without it the validator writes nothing. Run after any restructure, and after anything that touches git |
-| `index-artifacts.py` | Regenerates a node's `docs/index.md` from its cloud folder, in the node's own language. Flags orphans and cloud-pointer files that cannot be read on disk. Its Link column gives each Google pointer file its Drive URL; other files' cells stay empty rather than guessed |
+| `check-structure.py` | Validates every node and its local artifact attachment, warns when a linked node's README lacks the `artifacts:` key, declares it without a `docs/drive` link, or names a `root` this machine's mapping contradicts (proposing the `root` from that mapping), or a `url` that is not a Drive folder link; where this machine can read the linked folder's Drive id, it also proposes a missing `url` in a note and warns on one that names another folder, **and** checks the repository's git state — remote, identity — against the bindings declared in the root README. Notes limbo folders, a leftover `_tmp/`, each node's inbox count and oldest item, and the files that exist only on this machine; warns on tracked files over 1 MB in a slot and on a `.gitignore` that would commit inbox binaries. A git query that fails or times out is a warning, and what it would have counted shows as not checked, never as zero. `--no-git` skips every git query. `--report` also writes `status.html` at the brain root: one static dashboard that opens offline, with the verdict and totals, problems and warnings first, every node's counts in one table, and notes that differ only by node folded into one line; without it the validator writes nothing. Run after any restructure, and after anything that touches git |
+| `index-artifacts.py` | Regenerates a node's `docs/index.md` from its cloud folder, in the node's own language. Flags orphans and cloud-pointer files that cannot be read on disk. Its Link column gives each Google pointer file its Drive URL, and each other listed file the URL of the Drive id Drive for Desktop keeps on it on macOS, where this machine can read it. A cell it cannot fill keeps the link the previous index had for that same path, with a warning, so a machine that cannot read ids never blanks them; otherwise it stays empty, never guessed. A file still uploading, whose id is only temporary, gets no new link, and the run names it so it is regenerated later. A folder with more files than `COLLAPSE_OVER`, a constant in the script, is summarised by type with no cells, and when that drops links the previous index listed, the run says how many. Each folder heading carries the folder's own Drive link under the same rules, where its id can be read |
 
 These scripts live under this skill's `scripts/` directory. Resolve that directory for the
 current command, run the scripts from the brain root, and never persist an installed-skill

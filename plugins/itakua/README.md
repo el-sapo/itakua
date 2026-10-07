@@ -17,11 +17,12 @@ two skills with distinct triggers:
 - `itakua-map/scripts/new-node.sh` creates `notes/`, `log/`, and `inbox/` for a node and
   installs its README template without overwriting existing files.
 - `itakua-map/scripts/check-structure.py` validates nodes, local artifact reachability,
-  each linked node's declared Drive root, and the brain's declared Git bindings. It also
-  reports limbo, inbox counts, and the files that exist only on this machine; with
+  each linked node's declared Drive root and link, and the brain's declared Git bindings.
+  It also reports limbo, inbox counts, and the files that exist only on this machine; with
   `--report` it writes the same as a static `status.html` page at the brain root.
 - `itakua-map/scripts/index-artifacts.py` generates an approved index of cloud artifacts,
-  with Drive links for Google pointer files.
+  with Drive links for Google pointer files and, where Drive for Desktop on macOS gives a
+  file's Drive id, for every other listed file and under each folder heading.
 - `itakua-setup/scripts/link-drive.sh` combines committed `drive-map` knowledge with
   machine-local cloud paths to recreate mapped `docs/drive` symlinks.
 
