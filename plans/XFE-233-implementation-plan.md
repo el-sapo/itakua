@@ -13,8 +13,20 @@ answers cut the ticket down to a loose v1 that the owner will try for a few days
 - **No tracking machinery.** No `capture_id`, no `captured_from:`, no distilled/pending status, no
   validator warnings on captures.
 
-**v1 changes no script and adds no test.** It is skill text, two doc lines, a version bump, and
-Linear edits. The 80 existing tests stay green and unchanged.
+**v1 changes no script.** It is skill text, two doc lines, a version bump, and Linear edits. The
+80 existing tests stay green and unchanged.
+
+**Status: implemented (0.7.0).** The owner approved the plan and the readings in §3 on
+2026-10-07. Two notes on what was built:
+
+- **Decision 1 (where the format lives).** It went into the skill: `#### Captures` under
+  `00-inbox/` in itakua-map `SKILL.md`, which tool authors link to on GitHub. No
+  `docs/capture-format.md` was written; one can be added if a separate page for tool authors is
+  wanted.
+- **Tests.** One regression test was added, `test_root_inbox_captures_and_plain_drops_are_items_without_warnings`
+  in `tests/test_inbox_slot.py`. It pins that the skill's "nothing warns about it" stays true.
+
+Decision 2 (which tools the trial waits for) does not affect the repo.
 
 ---
 

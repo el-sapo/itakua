@@ -228,7 +228,7 @@
 
   <p><strong><span class="path-cloud">docs/</span> is the durable-artifact boundary.</strong> Creation and editing require owner approval. Binaries live in cloud storage; git holds an approved generated index so the Markdown side knows what exists.</p>
 
-  <p><strong><span class="path">inbox/</span> is captured, not filed.</strong> New nodes include it by default, so every capture tool has a place to write. Nothing there is a source: its text is committed, other files stay on this machine, unattended passes do not process it, and nothing is removed without owner approval.</p>
+  <p><strong><span class="path">inbox/</span> is captured, not filed.</strong> New nodes include it by default. For now capture tools write to the brain's root <span class="path">00-inbox/</span>, and an item moves into a node's inbox when the owner sorts it. Nothing there is a source: its text is committed, other files stay on this machine, unattended passes do not process it, and nothing is removed without owner approval.</p>
 
   <h2>Install with Claude</h2>
   <pre>claude plugin marketplace add el-sapo/itakua --scope user

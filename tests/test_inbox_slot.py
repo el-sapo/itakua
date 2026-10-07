@@ -188,6 +188,31 @@ class InboxSlotTests(unittest.TestCase):
 
             self.assertNotIn("inbox/:", result.stdout)
 
+    def test_root_inbox_captures_and_plain_drops_are_items_without_warnings(self):
+        # The capture format is loose: a capture, a broken header and a plain drop are all
+        # just items, counted the same and never warned about. A distilled line changes
+        # nothing either.
+        with tempfile.TemporaryDirectory() as temp:
+            brain, _ = self.plain_brain(temp)
+            before = self.validate(brain, "--no-git")
+            root = brain / "00-inbox"
+            self.write(root / "2026-10-06-clase-12.md",
+                       "---\ntype: capture\nsource: dictalo\nkind: transcript\n"
+                       "title: \"Clase 12: tríadas\"\n"
+                       "captured_at: 2026-10-06T19:42:11-03:00\n---\n\n"
+                       "Distilled 2026-10-08 into spaces/project/log/2026-10-08-clase-12.md\n\n"
+                       "## Note\nRepasar la tríada mayor.\n")
+            self.write(root / "broken.md",
+                       "---\ntype: capture\ntitle: Clase 12: tríadas\n\n## Note\nno closing line\n")
+            self.write(root / "thought.md", "just a thought\n")
+
+            result = self.validate(brain, "--no-git")
+
+            self.assertEqual(result.returncode, before.returncode, result.stdout)
+            self.assertEqual(self.lines(result, "WARN"), self.lines(before, "WARN"))
+            self.assertEqual(self.lines(result, "PROBLEM"), self.lines(before, "PROBLEM"))
+            self.assertIn("00-inbox/: 3 item(s)", result.stdout)
+
     def test_oldest_item_survives_a_fresh_checkout_through_git(self):
         with tempfile.TemporaryDirectory() as temp:
             brain, node = self.git_brain(temp)
