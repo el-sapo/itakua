@@ -124,6 +124,10 @@ class BrainMixin:
     def warnings(result):
         return [l for l in result.stdout.splitlines() if l.strip().startswith("WARN")]
 
+    @staticmethod
+    def notes(result):
+        return [l for l in result.stdout.splitlines() if l.strip().startswith("note")]
+
 
 class DriveRootDeclarationTests(BrainMixin, unittest.TestCase):
     def test_linked_node_without_key_is_warned_with_root_from_local_map(self):
@@ -362,7 +366,8 @@ class DriveFolderUrlTests(BrainMixin, unittest.TestCase):
             self.assertIn("owner approval", warned[0])
             self.assertNoMachinePath(temp, result.stdout)
 
-    def test_url_is_proposed_for_a_key_without_one_when_the_id_is_readable(self):
+    def test_a_key_without_url_gets_a_note_not_a_warning(self):
+        # `url` is optional and may be left out on purpose: no warning on every run.
         with tempfile.TemporaryDirectory() as temp:
             brain, target = self.linked(temp, KEY.format(root="My Drive/Project"))
 
@@ -370,11 +375,12 @@ class DriveFolderUrlTests(BrainMixin, unittest.TestCase):
                 brain, fake_xattr_env(temp, {target: self.FOLDER_ID}))
 
             self.assertEqual(result.returncode, 0, result.stdout)
-            warned = self.warnings(result)
-            self.assertEqual(len(warned), 1, result.stdout)
-            self.assertIn("has no `url`", warned[0])
-            self.assertIn(f"`url: {FOLDERS}{self.FOLDER_ID}`", warned[0])
-            self.assertIn("README edit: owner approval", warned[0])
+            self.assertEqual(self.warnings(result), [], result.stdout)
+            noted = [l for l in self.notes(result) if "url" in l]
+            self.assertEqual(len(noted), 1, result.stdout)
+            self.assertIn("has no `url` (optional)", noted[0])
+            self.assertIn(f"`url: {FOLDERS}{self.FOLDER_ID}`", noted[0])
+            self.assertIn("README edit: owner approval", noted[0])
             self.assertNotIn("PROBLEM", result.stdout)
             self.assertNoMachinePath(temp, result.stdout)
 
@@ -408,7 +414,7 @@ class DriveFolderUrlTests(BrainMixin, unittest.TestCase):
                 brain, fake_xattr_env(temp, {target: self.FOLDER_ID}))
 
             self.assertIn(f"`url: {FOLDERS}{self.FOLDER_ID}`",
-                          "\n".join(self.warnings(result)))
+                          "\n".join(self.notes(result)))
 
     def test_nothing_is_said_about_url_when_the_id_cannot_be_read(self):
         no_xattr, no_attribute = object(), object()
@@ -420,6 +426,8 @@ class DriveFolderUrlTests(BrainMixin, unittest.TestCase):
             "an id with other text": f"{self.FOLDER_ID} extra",
             "an empty value": "",
             "a failed read": {"stdout": self.FOLDER_ID + "\n", "exit": 1},
+            # Reportedly what Drive for Desktop gives an item still uploading (XFE-231).
+            "a temporary id": "local-" + self.FOLDER_ID,
         }
         for case, answer in cases.items():
             with self.subTest(case=case), tempfile.TemporaryDirectory() as temp:
@@ -438,6 +446,8 @@ class DriveFolderUrlTests(BrainMixin, unittest.TestCase):
                 self.assertIn("`root: My Drive/Project`", warned)
                 self.assertNotIn("url", warned)
                 self.assertEqual(self.warnings(declared), [], declared.stdout)
+                self.assertNotIn("url", "\n".join(self.notes(declared)))
+                self.assertNotIn("local-", missing.stdout + declared.stdout)
 
     def test_a_hanging_xattr_is_no_answer(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -675,6 +685,44 @@ class IndexLinkColumnTests(unittest.TestCase):
                 self.assertIn("1 link(s) kept from the previous index", warning[0])
                 self.assertIn("songs/Tab.docx", warning[0])
 
+    def test_a_temporary_id_is_never_written_and_is_said_apart(self):
+        for temporary in ("local-1234567890", "local-1"):
+            with self.subTest(temporary=temporary), tempfile.TemporaryDirectory() as temp:
+                node = self.build(temp)
+                tab = Path(temp) / "drive" / "songs" / "Tab.docx"
+                no_id, _ = self.run_indexer(node, "en")
+                (node / "docs" / "index.md").unlink()
+
+                result, index = self.run_indexer(
+                    node, "en", fake_xattr_env(temp, {tab: temporary}))
+
+                self.assertEqual(self.row(index, "Tab.docx")[-1], "")
+                self.assertNotIn("local-", index)
+                unread = re.search(r"(\d+) file\(s\) had no readable", no_id.stdout)
+                self.assertIn(f"{int(unread.group(1)) - 1} file(s) had no readable",
+                              result.stdout)
+                uploading = [l for l in result.stdout.splitlines() if "uploading" in l]
+                self.assertEqual(len(uploading), 1, result.stdout)
+                self.assertIn("1 file(s) still uploading", uploading[0])
+                self.assertIn("songs/Tab.docx", uploading[0])
+                self.assertIn("Regenerate the index once Drive shows them synced",
+                              uploading[0])
+                self.assertNotIn("WARNING", result.stdout)
+
+    def test_a_temporary_id_keeps_the_previous_link(self):
+        with tempfile.TemporaryDirectory() as temp:
+            node = self.build(temp)
+            tab = Path(temp) / "drive" / "songs" / "Tab.docx"
+            self.run_indexer(node, "en", fake_xattr_env(temp, {tab: self.FILE_ID}))
+
+            result, index = self.run_indexer(
+                node, "en", fake_xattr_env(temp, {tab: "local-" + self.NEW_FILE_ID}))
+
+            self.assertEqual(self.row(index, "Tab.docx")[-1], self.file_url(self.FILE_ID))
+            self.assertNotIn(self.NEW_FILE_ID, index)
+            self.assertIn("1 link(s) kept from the previous index", result.stdout)
+            self.assertIn("1 file(s) still uploading", result.stdout)
+
     def test_the_kept_links_warning_names_five_paths(self):
         with tempfile.TemporaryDirectory() as temp:
             node = self.build(temp)
@@ -843,6 +891,33 @@ class IndexLinkColumnTests(unittest.TestCase):
             asked = Path(env["FAKE_XATTR_ANSWERS"] + ".log").read_text(encoding="utf-8")
             self.assertEqual(asked.count("\n"), 1, asked)
             self.assertIn("had no readable Drive id", result.stdout)
+
+    def test_links_dropped_by_a_folder_now_summarised_are_counted(self):
+        with tempfile.TemporaryDirectory() as temp:
+            node = self.build(temp)
+            takes = Path(temp) / "drive" / "takes"
+            takes.mkdir()
+            answers = {}
+            for i in range(13):
+                answers[takes / f"take{i:02}.pdf"] = f"1TaKeIdNuMbEr{i:02}AbCdEfGh"
+            for path in list(answers)[:12]:
+                path.write_bytes(b"%PDF-1.4")
+            env = fake_xattr_env(temp, answers)
+            listed, first = self.run_indexer(node, "en", env)
+            (takes / "take12.pdf").write_bytes(b"%PDF-1.4")
+
+            grown, second = self.run_indexer(node, "en", env)
+            again, third = self.run_indexer(node, "en", env)
+
+            self.assertEqual(first.count("1TaKeIdNuMbEr"), 12, first)
+            self.assertNotIn("dropped", listed.stdout)
+            self.assertNotIn("1TaKeIdNuMbEr", second)
+            dropped = [l for l in grown.stdout.splitlines() if "dropped" in l]
+            self.assertEqual(len(dropped), 1, grown.stdout)
+            self.assertIn("12 link(s) from the previous index dropped: takes/", dropped[0])
+            self.assertIn("more than 12 files", dropped[0])
+            self.assertNotIn("dropped", again.stdout)
+            self.assertEqual(third, second)
 
     def test_collapsed_folders_ask_for_no_ids_and_have_no_cells(self):
         with tempfile.TemporaryDirectory() as temp:

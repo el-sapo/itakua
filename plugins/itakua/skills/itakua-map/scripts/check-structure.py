@@ -402,6 +402,9 @@ FOLDER_URL = "https://drive.google.com/drive/folders/{}"
 # Where Drive for Desktop on macOS keeps a synced item's Drive id.
 ITEM_ID_XATTR = "com.google.drivefs.item-id#S"
 XATTR_TIMEOUT = 5                # seconds; a slower answer counts as none
+# How Drive for Desktop is reported to mark the id of an item still uploading. No real
+# Drive id starts this way; one that did would be a link that opens nothing.
+TEMPORARY_ID = "local-"
 
 
 def nfc(text):
@@ -536,8 +539,8 @@ def drive_item_id(path):
     On macOS it is the extended attribute com.google.drivefs.item-id#S, read with Apple's
     xattr on the resolved path, so nothing depends on xattr following a symlink. That is
     confirmed for files, not yet for folders, so None is an ordinary answer: no command,
-    no Drive, no attribute, an error, a timeout, or an answer not shaped like a Drive id.
-    None of those is ever output.
+    no Drive, no attribute, an error, a timeout, an answer not shaped like a Drive id, or
+    a temporary one (local-...) for an item still uploading. None of those is ever output.
     """
     xattr = shutil.which("xattr")
     if not xattr:
@@ -549,7 +552,9 @@ def drive_item_id(path):
     except (OSError, ValueError, subprocess.SubprocessError):
         return None
     value = result.stdout.decode("utf-8", "replace").strip()
-    return value if result.returncode == 0 and DRIVE_ID.fullmatch(value) else None
+    if result.returncode != 0 or value.startswith(TEMPORARY_ID):
+        return None
+    return value if DRIVE_ID.fullmatch(value) else None
 
 
 def folder_link_id(url):
@@ -579,14 +584,15 @@ def folder_link_id(url):
 
 def check_artifact_url(declared, readme, drive, folder, at):
     """Compare a declared `artifacts.url` with the Drive id of the folder docs/drive
-    points to, `folder`. Without that id a missing url is no finding: most machines
-    cannot read it, and a url is never guessed."""
+    points to, `folder`. A missing url is only a note, and only where that id is
+    readable: the key is optional, the owner may leave it out on purpose, and a url is
+    never guessed. A url that is unusable or names another folder is a warning."""
     url = declared.get("url", "")
     if url == "":
         if folder:
-            warn(f"{readme} `artifacts:` has no `url`; from the Drive id of the folder "
-                 f"{drive} points to, propose `url: {FOLDER_URL.format(folder)}`. Adding "
-                 f"it is a README edit: owner approval", node=at)
+            note(f"{readme} `artifacts:` has no `url` (optional); from the Drive id of the "
+                 f"folder {drive} points to, it would be `url: {FOLDER_URL.format(folder)}`. "
+                 f"Adding it is a README edit: owner approval", node=at)
         return
     declared_id, wrong = folder_link_id(url)
     if wrong:

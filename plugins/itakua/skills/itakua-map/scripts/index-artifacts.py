@@ -26,12 +26,14 @@ files (.gdoc, .gsheet, .gslides) hold their Drive file id on disk, so their link
 exact. Any other file's id comes, with no Drive API call, from the extended attribute
 Drive for Desktop keeps on it on macOS (com.google.drivefs.item-id#S), and its link is
 https://drive.google.com/file/d/<id>/view. Where no id can be read -- another OS, Drive
-not running, a pointer stub still streaming -- the cell keeps the link the previous
-docs/index.md had for that same path, with a warning, so regenerating on a machine that
-cannot read ids never blanks links another machine wrote. Failing that it stays EMPTY. A
-link is never guessed and never carried to another path: a search by name can land on
-the wrong copy, and a wrong link is worse than none. Folders collapsed into a type
-summary list no files, so they have no cells to fill.
+not running, a pointer stub still streaming, a file still uploading, whose temporary id
+(local-...) would be a dead link -- the cell keeps the link the previous docs/index.md
+had for that same path, with a warning, so regenerating on a machine that cannot read
+ids never blanks links another machine wrote. Failing that it stays EMPTY. A link is
+never guessed and never carried to another path: a search by name can land on the wrong
+copy, and a wrong link is worse than none. Folders collapsed into a type summary list no
+files, so they have no cells to fill; when that drops links the previous index listed,
+the run says how many.
 """
 import os, sys, datetime, json, pathlib, re, shutil, subprocess, unicodedata
 
@@ -41,6 +43,9 @@ DRIVE_ID = re.compile(r"[A-Za-z0-9_-]{10,}")
 # Where Drive for Desktop on macOS keeps a synced file's Drive id.
 ITEM_ID_XATTR = "com.google.drivefs.item-id#S"
 XATTR_TIMEOUT = 5    # seconds; after one timeout no other file is asked
+# How Drive for Desktop is reported to mark the id of an item that has not finished
+# uploading. No real Drive id starts this way, so such a value is never written.
+TEMPORARY_ID = "local-"
 # A row of an index this script wrote, with a Drive link: `name`, the cells between, link.
 OLD_ROW = re.compile(r"\| `(.+)` \|(.*)\| *<(https://drive\.google\.com/[^\s<>|]+)> *\|")
 
@@ -148,12 +153,13 @@ xattr_cmd = shutil.which("xattr")    # Apple's; without one, no file's id is rea
 
 
 def drive_item_id(path):
-    """The Drive id Drive for Desktop keeps on a synced file, or "".
+    """The Drive id Drive for Desktop keeps on a synced file, "", or None while uploading.
 
     Read with xattr on the resolved path, so nothing depends on xattr following a
     symlink. No command, no attribute, an error or an answer not shaped like a Drive id
-    all give "", never a guess. A timeout means Drive is not answering: the files after
-    it are not asked, and keep their previous links instead.
+    all give "", never a guess. A temporary id (local-...) gives None: the file is still
+    uploading, and the id it will have is not known yet. A timeout means Drive is not
+    answering: the files after it are not asked, and keep their previous links instead.
     """
     global xattr_cmd
     if not xattr_cmd:
@@ -168,13 +174,18 @@ def drive_item_id(path):
     except (OSError, ValueError, subprocess.SubprocessError):
         return ""
     value = result.stdout.decode("utf-8", "replace").strip()
-    return value if result.returncode == 0 and DRIVE_ID.fullmatch(value) else ""
+    if result.returncode != 0:
+        return ""
+    if value.startswith(TEMPORARY_ID):
+        return None
+    return value if DRIVE_ID.fullmatch(value) else ""
 
 
 def file_link(path):
-    """The Drive URL of a file that is not a Google pointer, from its Drive id, or ""."""
+    """The Drive URL of a file that is not a Google pointer, from its Drive id: "" when
+    none is readable, None while the file is still uploading."""
     file_id = drive_item_id(path)
-    return f"https://drive.google.com/file/d/{file_id}/view" if file_id else ""
+    return f"https://drive.google.com/file/d/{file_id}/view" if file_id else file_id
 
 
 def previous_links(index):
@@ -284,11 +295,19 @@ def main():
     # A cell with no readable id keeps the link the index being replaced had for that
     # same path: this machine not reading ids is no reason to blank another machine's.
     before, linked, kept, unlinked = previous_links(dest), [], [], []
+    uploading, dropped = [], {}
 
     def link(path, url):
+        if url is None:
+            # A temporary id: said apart, so an empty cell is not taken for a machine
+            # that cannot read ids.
+            uploading.append(path)
         if not url:
             url = before.get(nfc(path), "")
-            (kept if url else unlinked).append(path)
+            if url:
+                kept.append(path)
+            elif path not in uploading:
+                unlinked.append(path)
         if url:
             linked.append(path)
         return url
@@ -330,6 +349,9 @@ def main():
                 S["folder_sub"].format(n=len(files), size=human(sub)), ""]
         if len(files) > COLLAPSE_OVER:
             # too many to list one by one -- summarise by type
+            gone = sum(nfc(path) in before for *_, path, _ in files)
+            if gone:
+                dropped[folder] = gone
             byext = {}
             for fn, size, ext, *_ in files:
                 e = ext.lstrip(".") or "—"
@@ -413,6 +435,16 @@ def main():
         print(f"  {len(unlinked)} file(s) had no readable Drive id and no earlier link; "
               f"their link cells are empty (ids come from Google pointer stubs and, on "
               f"macOS, from Drive for Desktop: is it running, the folder available offline?)")
+    if uploading:
+        more = f", and {len(uploading) - 5} more" if len(uploading) > 5 else ""
+        print(f"  {len(uploading)} file(s) still uploading to Drive, which gave them only a "
+              f"temporary id, not written: {', '.join(uploading[:5])}{more}. Regenerate "
+              f"the index once Drive shows them synced")
+    if dropped:
+        folders = ", ".join(f"{f}/" if f else "the root" for f in sorted(dropped))
+        print(f"  {sum(dropped.values())} link(s) from the previous index dropped: "
+              f"{folders} now hold(s) more than {COLLAPSE_OVER} files, summarised by type "
+              f"with no link cells; cite those files through Drive's Copy link")
     if orphans:
         print(f"  🚨 WARNING: {len(orphans)} orphan file(s) ({human(orphan_bytes)}) in "
               f"{docs_dir} are in NEITHER git NOR cloud storage — move them under docs/drive/")
