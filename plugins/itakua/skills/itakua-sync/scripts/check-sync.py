@@ -356,8 +356,8 @@ def main():
         check_dropbox()
     if "icloud" in seen or "icloud" in tools:
         for link in drive_links():
-            note(f"{link}: how iCloud treats this link is unverified -- confirm on a second "
-                 f"device that it did not copy the Drive folder")
+            note(f"{link}: how iCloud treats this link is untested -- confirm on a second "
+                 f"device what arrived before relying on it")
     check_conflicts(set(tools) | set(seen))
 
     for m in notes:

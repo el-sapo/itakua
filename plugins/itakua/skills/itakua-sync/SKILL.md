@@ -29,7 +29,7 @@ row is a README edit: owner approval.
 | git | `.gitignore` (the block below) | `git check-ignore -v <path>` | binaries in history are permanent |
 | Syncthing | `.stignore` at the folder root | the folder's ignore patterns in the web UI, or `GET /rest/db/ignores?folder=<id>` | the first matching pattern wins, the opposite of git, so order matters; `.stignore` itself is never synced, so write it on every machine |
 | Dropbox | per-path attribute, no ignore file: `xattr -w com.dropbox.ignored 1 <path>` on macOS, `attrib +s` on Windows, `attr -s com.dropbox.ignored -V 1` on Linux | `xattr -p com.dropbox.ignored <path>` | the attribute is per machine and lost by a move or copy; set it again after relinking |
-| iCloud | only a name ending in `.nosync` | nothing to read; watch what appears on a second device | `docs/drive` cannot be renamed, so the link cannot be excluded this way. How iCloud treats the link (follows it, copies it as a link, or skips it) is unverified; confirm on a second device before relying on it |
+| iCloud | only a name ending in `.nosync` | nothing to read; watch what appears on a second device | `docs/drive` cannot be renamed, so nothing excludes it. How iCloud treats the link is untested; until it is, treat iCloud as a mirror with one writer, and confirm on a second device what arrived before relying on it |
 
 Write each tool's rules from the three classes: exclude everything in *this machine only*
 (`docs/drive`, `.drive-map.local`, `status.html`), carry everything in *the brain*, and
@@ -44,8 +44,15 @@ the map's: binaries end in `docs/`.
 **Conflict copies.** Every file sync makes one when two machines edit the same file:
 Syncthing `*.sync-conflict-*`, Dropbox `(conflicted copy)`, iCloud `name 2.md`. Captures
 never edit a file, so they cannot conflict; only `notes/` and READMEs edited on two
-devices can. The check lists every copy it finds. Resolving one is an edit to `notes/`
-or a README, so it needs owner approval; never delete a copy unread.
+devices can. With one writer there are none: a brain one machine edits and the others
+only read or capture into cannot conflict, and the Sync row can say so (`icloud, one
+writer: the Mac`). The check lists every copy it finds. Resolving one is an edit to
+`notes/` or a README, so it needs owner approval; never delete a copy unread.
+
+A mirror is not a backup. Every tool here propagates a deletion or a bad rewrite within
+seconds, and only git keeps every version. The map's answer holds for the layer that
+matters, logs are the history, but a brain carried by a file sync alone has no way back
+for a deleted note beyond what the tool's trash keeps.
 
 ## none, deliberately
 
