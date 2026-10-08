@@ -1,21 +1,23 @@
 ---
 name: itakua-setup
-description: Create, bootstrap, repair, or migrate the machine-local setup of an Itakua brain. Use when creating or cloning a brain; bringing a fresh or moved checkout into working order; diagnosing Git authentication, sandbox permission, or repository configuration failures; fixing missing, dangling, or unavailable docs/drive attachments; resolving absent or mismatched repository-local Git identity; or configuring portable and local artifact mappings.
+description: Create an Itakua brain, or bring a copy of one into working order on a machine. Use when creating a brain; when a brain has just been copied, cloned or moved; when a docs/drive attachment is missing, dangling or unavailable; or when configuring the portable and machine-local artifact mappings. Sync tools and their failures belong to itakua-sync.
 ---
 
 # Set up an Itakua brain
 
 Read the sibling `../itakua-map/SKILL.md` before acting. It defines the structure and
 approval boundaries; do not infer or restate them here. This skill owns creation and
-machine-local setup only.
+machine-local setup only. How a brain travels between machines, if it does, is
+`itakua-sync`'s.
 
 ## Choose the workflow
 
 - **Create a brain:** resolve this skill's directory, then run its `new-brain.sh` from any
   directory.
-- **Repair or initialize a clone:** work through the checkout procedure below.
+- **Bring a copy into working order:** work through the procedure below.
 - **Attach artifacts only:** inspect its maps, then run this skill's `link-drive.sh` from
   the brain root.
+- **Add or check a sync:** load `itakua-sync`.
 - **Create nodes or operate normally:** return to `itakua-map`.
 
 Never write the resolved path of an installed skill or plugin cache into a brain. Refer
@@ -24,64 +26,39 @@ current command.
 
 ## Create a brain
 
-Run:
-
 ```sh
-<itakua-setup>/scripts/new-brain.sh <path> "<Name>" --identity "Name <email>"
+<itakua-setup>/scripts/new-brain.sh <path> "<Name>"
 ```
 
-Add `--local-only` when the brain must never have a hosted remote, or
-`--into-existing` when scaffolding around existing files. The script refuses to overwrite
-existing files and does not copy either skill into the new repository.
+This makes a plain folder with the spine: `README.md` with the bindings table,
+`AGENTS.md`, `drive-map`, `00-inbox/` and `spaces/`. No sync is a complete setup; add one
+afterwards with `itakua-sync` if the owner wants it. Add `--local-only` for a brain whose
+material must never leave the machine: the README then declares *sync: none,
+deliberately*, which `itakua-sync`'s check reads. Add `--into-existing` to scaffold
+around files already there. The script never overwrites an existing file and does not
+copy any skill into the brain.
 
-Afterward, load `itakua-map` to create the first node and validate normal structure.
+Afterwards, load `itakua-map` to create the first node and validate the structure.
 
-## Bring a checkout into working order
+## Bring a copy into working order
 
-Run these checks from the brain root:
+From the brain root:
 
 1. Read the root `README.md`, then the node README for anything you will touch.
 2. Locate the sibling map skill and run
    `python3 <itakua-map>/scripts/check-structure.py` using its actual installed directory
    for this command. Do not persist that resolved directory.
-3. Compare the README's Git identity binding with repository-local `user.name` and
-   `user.email`. Set only `--local` values. If the README does not declare the intended
-   identity, ask the owner rather than borrowing the global identity.
-4. If an indexed artifact layer is absent or dangling, inspect `drive-map` and
+3. If an indexed artifact layer is absent or dangling, inspect `drive-map` and
    `.drive-map.local`, make the cloud folders available offline, and run the linker.
-5. Run the map validator again. Report unresolved mappings or unavailable storage as
-   explicit setup gaps; do not invent targets.
-
-## Diagnose clone and Git failures
-
-Keep host access separate from repository configuration. A hosted or sandboxed agent may
-see the filesystem without sharing the host's keychain, SSH keys, GitHub CLI session, or
-interactive credential prompt.
-
-| Signal | Category | Response |
-|---|---|---|
-| `Authentication failed`, `Permission denied (publickey)`, or an unavailable credential prompt | Host authentication | Stop retrying. Show the failed command and have the owner clone or log in from a local interactive terminal. Give an exact command only when the remote, provider, and authentication method are known; otherwise state what is missing instead of guessing. Never ask them to paste a token or key into chat. |
-| `Operation not permitted` or `Permission denied` while creating, renaming, or removing a path under `.git/` | Sandbox/filesystem permission | Report the exact path and failed operation. Agent-driven Git needs create, write, rename, and delete access within this repository's worktree and `.git/`; read/write access without delete is insufficient. |
-| `not a git repository`, a wrong remote, or an absent/mismatched local identity | Repository configuration | Inspect `git status`, `git remote -v`, and repository-local config. Repair only the declared repository bindings; do not treat configuration as an authentication failure. |
-
-For `.git/index.lock`, first check whether the file exists and whether a Git process is
-using it. Remove only that exact, confirmed stale lock when permitted; otherwise ask the
-owner to remove it in the host terminal. If no lock exists and creation itself is blocked,
-deletion cannot help: obtain create, write, rename, and delete access scoped to this
-worktree and `.git/`, or leave Git mutations to the owner. Never recursively change
-`.git/` permissions or delete other lock files speculatively. A checkout created by the
-owner does not give the agent remote credentials; later fetch or push operations may need
-the same host-side handoff.
-
-Keep these diagnostics out of `check-structure.py`. The structural validator may report
-repository state, but it cannot prove that a particular bridge has credentials, an
-interactive terminal, or sufficient sandbox permissions.
+4. Run the validator again. Report unresolved mappings or unavailable storage as explicit
+   setup gaps; do not invent targets.
+5. If the README's Sync row names a tool, load `itakua-sync` and run its check too.
 
 ## Attach artifacts
 
-`drive-map` is committed knowledge: each line maps a node path relative to `spaces/` to a
-path relative to this machine's artifact root. `.drive-map.local` is gitignored and holds
-absolute overrides for genuine machine exceptions. Local entries win.
+`drive-map` travels with the brain: each line maps a node path relative to `spaces/` to a
+path relative to this machine's artifact root. `.drive-map.local` stays on this machine
+and holds absolute overrides for genuine machine exceptions. Local entries win.
 
 ```text
 # drive-map
@@ -98,21 +75,20 @@ Run from the brain root:
 ```
 
 Use `--convention` only for a deliberate greenfield layout that mirrors node paths. The
-linker otherwise requires an explicit portable or local mapping for an indexed node. It
-does not need a separate marker for local-only targets: an entry in `.drive-map.local` is
-the machine-local declaration, and another clone will surface that node as unmapped until
-an agent or owner supplies its local value.
+linker otherwise requires an explicit portable or local mapping for an indexed node. An
+entry in `.drive-map.local` is the machine-local declaration; another copy of the brain
+will surface that node as unmapped until an agent or owner supplies its local value.
 
 The linker refuses relative or unavailable roots and does not replace an existing link or
 file. If the local cloud mirror is invisible to the agent, give the exact terminal command
 to the owner instead of approximating the path.
 
 A linked node also declares its Drive folder in the README `artifacts:` key that
-`itakua-map` defines, for readers that cannot follow the symlink: its `root`, and
-optionally its `url`, the folder's link. After linking, run the map validator: it proposes
-the `root` from this machine's mapping, and the `url` where this machine can read the
-folder's Drive id; otherwise the link comes from Drive's *Copy link* on the folder.
-Writing the key is a README edit and needs owner approval.
+`itakua-map` defines, for readers that cannot follow the link: its `root`, and optionally
+its `url`. After linking, run the map validator: it proposes the `root` from this
+machine's mapping, and the `url` where this machine can read the folder's Drive id;
+otherwise the link comes from Drive's *Copy link* on the folder. Writing the key is a
+README edit and needs owner approval.
 
 ## Script ownership
 
@@ -120,6 +96,7 @@ Writing the key is a README edit and needs owner approval.
 |---|---|
 | `itakua-setup` | `new-brain.sh`, `link-drive.sh`, and mapping examples |
 | `itakua-map` | `new-node.sh`, `check-structure.py`, `index-artifacts.py`, and the node template |
+| `itakua-sync` | `check-sync.py` |
 
 Resolve a script within its owning skill at execution time. Do not duplicate scripts
 between skills.

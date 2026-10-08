@@ -7,8 +7,8 @@
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <style>
-  /* Colours are the brand tokens (tokens.css, light and dark). Git and cloud take the note-link
-     and document-link styles: the git and cloud boundary made visible. */
+  /* Colours are the brand tokens (tokens.css, light and dark). The brain and the cloud take
+     the note-link and document-link styles: the brain and cloud boundary made visible. */
   :root {
     --ground:  var(--itakua-page);
     --surface: var(--itakua-surface);
@@ -122,17 +122,17 @@
     <tbody>
       <tr>
         <td>itakua</td>
-        <td>Nodes, four slots, per-node READMEs. Stands a brain up, then validates it — including whether the repository's git remote and identity match what the brain says they are.</td>
+        <td>Three skills. <code>itakua-map</code> operates a brain: nodes, four slots, per-node READMEs, and the validator. <code>itakua-setup</code> stands one up on a machine. <code>itakua-sync</code> owns whatever carries it between machines — git, Syncthing, Dropbox, iCloud, or nothing, deliberately.</td>
       </tr>
     </tbody>
   </table>
 
   <h2>How Itakua is put together</h2>
-  <p>One folder tree, two storage systems, and they never overlap. That is the whole idea — everything else follows from keeping those subtrees disjoint.</p>
+  <p>One folder of plain files, one cloud folder for the binaries, and they never overlap. That is the whole idea — everything else follows from keeping those subtrees disjoint. The brain needs no sync; add one if you want it, your way.</p>
 
   <figure>
     <div class="figbox">
-      <svg viewBox="0 0 900 470" role="img" aria-label="Three layers. The plugin, installed in your agent, operates on a node. The node holds four slots: notes, log, docs and inbox. Notes and log are committed to a local git repository. Docs is a symlink out to cloud storage. Inbox holds captured material: its text is committed, other files stay on this machine, and nothing processes it automatically.">
+      <svg viewBox="0 0 900 470" role="img" aria-label="Three layers. The plugin, installed in your agent, operates on a node. The node holds four slots: notes, log, docs and inbox. Notes and log are plain markdown in the brain folder. Docs is a symlink out to cloud storage. Inbox holds captured material that waits to be filed, and nothing processes it automatically.">
         <defs>
           <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
             <path d="M 0 0 L 10 5 L 0 10 z" class="d-ink"></path>
@@ -157,7 +157,7 @@
 
         <!-- Layer 3: the plugin -->
         <rect x="100" y="22" width="780" height="52" rx="6" stroke-width="1" stroke-dasharray="5 4" class="d-surf s-ink"></rect>
-        <text x="490" y="45" text-anchor="middle" font-size="13" font-weight="600" class="t-body d-ink">the itakua plugin · itakua-map + itakua-setup</text>
+        <text x="490" y="45" text-anchor="middle" font-size="13" font-weight="600" class="t-body d-ink">the itakua plugin · itakua-map + itakua-setup + itakua-sync</text>
         <text x="490" y="62" text-anchor="middle" font-size="11.5" class="t-body d-mut">installed in your agent account, not copied into each brain</text>
 
         <line x1="490" y1="74" x2="490" y2="108" class="s-ink" stroke-width="1.2" marker-end="url(#ar)"></line>
@@ -165,7 +165,7 @@
 
         <!-- Layer 2: the node -->
         <rect x="100" y="110" width="780" height="140" rx="6" stroke-width="1.4" class="d-surf s-ink"></rect>
-        <text x="114" y="133" font-size="12.5" font-weight="500" class="t-mono d-ink">spaces/guitar/</text>
+        <text x="114" y="133" font-size="12.5" font-weight="500" class="t-mono d-ink">spaces/french/</text>
         <text x="235" y="133" font-size="11.5" class="t-body d-mut">— a node: any folder with a README.md</text>
 
         <!-- four slots -->
@@ -192,30 +192,30 @@
         <!-- arrows down to storage -->
         <path d="M 202 236 L 202 285 L 290 285 L 290 322" fill="none" class="s-git" stroke-width="1.4" marker-end="url(#ar-git)"></path>
         <path d="M 393 236 L 393 285 L 310 285 L 310 322" fill="none" class="s-git" stroke-width="1.4" marker-end="url(#ar-git)"></path>
-        <text x="410" y="277" font-size="10.5" class="t-mono d-git">committed</text>
+        <text x="410" y="277" font-size="10.5" class="t-mono d-git">plain files</text>
 
         <line x1="584" y1="236" x2="584" y2="322" class="s-cloud" stroke-width="1.4" marker-end="url(#ar-cloud)"></line>
         <text x="594" y="283" font-size="10.5" class="t-mono d-cloud">docs/drive → symlink</text>
 
         <line x1="775" y1="236" x2="775" y2="282" class="s-ink" stroke-width="1.2" stroke-dasharray="4 4" opacity="0.5"></line>
-        <text x="775" y="300" text-anchor="middle" font-size="11.5" font-style="italic" class="t-body d-mut">text committed,</text>
-        <text x="775" y="316" text-anchor="middle" font-size="11.5" font-style="italic" class="t-body d-mut">binaries stay local</text>
+        <text x="775" y="300" text-anchor="middle" font-size="11.5" font-style="italic" class="t-body d-mut">waits here until filed;</text>
+        <text x="775" y="316" text-anchor="middle" font-size="11.5" font-style="italic" class="t-body d-mut">binaries end in docs/</text>
 
         <!-- Layer 1: storage -->
         <rect x="160" y="324" width="280" height="76" rx="6" stroke-width="1.4" class="d-surf s-git"></rect>
-        <text x="300" y="352" text-anchor="middle" font-size="13" font-weight="600" class="t-body d-git">a local git repository</text>
-        <text x="300" y="371" text-anchor="middle" font-size="11" class="t-body d-mut">plain markdown, versioned, greppable</text>
-        <text x="300" y="387" text-anchor="middle" font-size="11" class="t-body d-mut">a remote only if you choose one</text>
+        <text x="300" y="352" text-anchor="middle" font-size="13" font-weight="600" class="t-body d-git">the brain: a folder</text>
+        <text x="300" y="371" text-anchor="middle" font-size="11" class="t-body d-mut">plain markdown, greppable, yours</text>
+        <text x="300" y="387" text-anchor="middle" font-size="11" class="t-body d-mut">synced only if you choose to, your way</text>
 
         <rect x="496" y="324" width="240" height="76" rx="6" stroke-width="1.4" class="d-surf s-cloud"></rect>
         <text x="616" y="352" text-anchor="middle" font-size="13" font-weight="600" class="t-body d-cloud">cloud storage</text>
         <text x="616" y="371" text-anchor="middle" font-size="11" class="t-body d-mut">separate infrastructure,</text>
         <text x="616" y="387" text-anchor="middle" font-size="11" class="t-body d-mut">its own account, its own sync</text>
 
-        <text x="100" y="432" font-size="11.5" class="t-body d-mut">git never sees the binaries · Drive never sees the markdown · the two subtrees are disjoint by construction</text>
+        <text x="100" y="432" font-size="11.5" class="t-body d-mut">the brain never holds the binaries · Drive never sees the markdown · the two subtrees are disjoint by construction</text>
       </svg>
     </div>
-    <figcaption>Every file in a node lands in exactly one of three places. <span class="path-git">notes/</span> and <span class="path-git">log/</span> are committed; <span class="path-cloud">docs/drive</span> is a symlink into cloud storage and is gitignored; <span class="path">inbox/</span> commits its text and keeps other files on this machine until they are filed.</figcaption>
+    <figcaption>Every file in a node lands in exactly one of three places. <span class="path-git">notes/</span> and <span class="path-git">log/</span> are the brain; <span class="path-cloud">docs/drive</span> is a symlink into cloud storage that no sync ever carries; <span class="path">inbox/</span> holds what waits to be filed.</figcaption>
   </figure>
 
   <h2>The parts worth knowing</h2>
@@ -226,9 +226,9 @@
 
   <p><strong><span class="path-git">notes/</span> changes with owner approval; <span class="path-git">log/</span> is append-only.</strong> Notes say what's true now. Logs preserve dated raw evidence, and corrections arrive as later entries instead of rewriting history.</p>
 
-  <p><strong><span class="path-cloud">docs/</span> is the durable-artifact boundary.</strong> Creation and editing require owner approval. Binaries live in cloud storage; git holds an approved generated index so the Markdown side knows what exists.</p>
+  <p><strong><span class="path-cloud">docs/</span> is the durable-artifact boundary.</strong> Creation and editing require owner approval. Binaries live in cloud storage; the brain holds an approved generated index so the Markdown side knows what exists.</p>
 
-  <p><strong><span class="path">inbox/</span> is captured, not filed.</strong> New nodes include it by default. For now capture tools write to the brain's root <span class="path">00-inbox/</span>, and an item moves into a node's inbox when the owner sorts it. Nothing there is a source: its text is committed, other files stay on this machine, unattended passes do not process it, and nothing is removed without owner approval.</p>
+  <p><strong><span class="path">inbox/</span> is captured, not filed.</strong> New nodes include it by default. For now capture tools write to the brain's root <span class="path">00-inbox/</span>, and an item moves into a node's inbox when the owner sorts it. Nothing there is a source, unattended passes do not process it, and nothing is removed without owner approval.</p>
 
   <h2>Install with Claude</h2>
   <pre>claude plugin marketplace add el-sapo/itakua --scope user
@@ -242,14 +242,13 @@ claude plugin install itakua@itakua --scope user</pre>
   <pre>codex plugin marketplace add el-sapo/itakua
 codex plugin add itakua@itakua</pre>
   <div class="note">
-    <strong>Then start a new Codex task.</strong> Claude and Codex use separate discovery metadata, but both load <code>itakua-map</code> for normal operation and <code>itakua-setup</code> for creation or machine repair.
+    <strong>Then start a new Codex task.</strong> Claude and Codex use separate discovery metadata, but both load <code>itakua-map</code> for normal operation, <code>itakua-setup</code> for creation or machine repair, and <code>itakua-sync</code> for anything that carries a brain between machines.
   </div>
 
   <h2>Start a brain</h2>
-  <pre>&lt;plugin&gt;/skills/itakua-setup/scripts/new-brain.sh ~/Documents/mybrain "My Brain" \
-  --identity "Your Name &lt;you@example.com&gt;"</pre>
-  <p>Add <code>--local-only</code> for a brain whose material must never reach a hosted remote — it configures no remote, which is the entire control. After cloning on another machine, load <code>itakua-setup</code>; it repairs local identity, staging folders, and artifact attachments without storing a plugin-cache path in the brain.</p>
+  <pre>&lt;plugin&gt;/skills/itakua-setup/scripts/new-brain.sh ~/Documents/mybrain "My Brain"</pre>
+  <p>That is a plain folder, and a complete setup. To carry it between machines, load <code>itakua-sync</code>: it writes each tool's ignore rules from one table, and its check keeps the brain honest about what it declared. Add <code>--local-only</code> for a brain whose material must never leave the machine — the README then says so, and the sync check warns if the folder ever sits inside a synced one. On another machine, load <code>itakua-setup</code>; it validates the tree and attaches artifacts without storing a plugin-cache path in the brain.</p>
 
   <hr>
-  <footer>Your knowledge stays in plain markdown, in a git repository you own. The framework has no opinion on which accounts you use — a brain binds its own path, git remote, storage account and agent account, and declares them in its README.</footer>
+  <footer>Your knowledge stays in plain markdown, in a folder you own, synced your way or not at all. The framework has no opinion on which accounts you use — a brain binds its own path, sync, storage account and agent account, and declares them in its README.</footer>
 </div>

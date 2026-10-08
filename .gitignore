@@ -13,3 +13,4 @@
 _committed.tar
 *.tar
 *.tgz
+__pycache__/

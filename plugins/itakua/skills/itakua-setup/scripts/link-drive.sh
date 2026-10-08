@@ -7,13 +7,13 @@
 #
 # Portable mappings live in committed `drive-map` at the brain root:
 #
-#   guitar|Guitarra
-#   projects/demo|CLIENTS/Demo
+#   french|French class
+#   house/renovation|House/Renovation
 #
 # The right side is relative to the machine-local root supplied on the command line.
-# Genuine machine exceptions live in gitignored `.drive-map.local` as absolute targets:
+# Genuine machine exceptions live in `.drive-map.local`, which never leaves this machine:
 #
-#   projects/demo|/absolute/path/on/this/machine/Demo
+#   work/team|/absolute/path/on/this/machine/Team
 #
 # Local overrides win over portable mappings. An indexed node missing from both maps is
 # reported as unmapped so an agent or owner can resolve the gap; the script does not guess.
@@ -102,7 +102,7 @@ is_node_dir() {
       *) part="$rest"; rest="" ;;
     esac
     if [ "$state" = "node" ]; then
-      case "$part" in notes|log|docs|inbox|_tmp) return 1 ;; esac
+      case "$part" in notes|log|docs|inbox) return 1 ;; esac
     elif [ "$state" = "orphan" ]; then
       return 1
     fi

@@ -1,15 +1,13 @@
 #!/usr/bin/env python3
-"""Validate a brain against the four-slot framework, and against its own bindings.
+"""Validate a brain against the four-slot framework.
 
-    python3 <itakua-map>/scripts/check-structure.py          # structure + git state
-    python3 <itakua-map>/scripts/check-structure.py --no-git # structure only, no git calls
+    python3 <itakua-map>/scripts/check-structure.py          # structure
     python3 <itakua-map>/scripts/check-structure.py --report # also write status.html
 
 A folder is either a SLOT (notes/ log/ docs/ inbox/) directly inside a node, something
 filed INSIDE a slot, or a CHILD NODE (it has its own README.md). Any other folder inside a
-node is LIMBO: the owner's, reported as a note and never a failure. A leftover _tmp/ is the
-slot inbox/ replaced in 0.5.0, reported as legacy. A folder under spaces/ whose parent is
-not a node is still a problem: that is a node missing its README.
+node is LIMBO: the owner's, reported as a note and never a failure. A folder under spaces/
+whose parent is not a node is still a problem: that is a node missing its README.
 
 A node whose docs/drive is linked declares where that folder lives in Drive with an
 `artifacts:` key in its README frontmatter. Readers that cannot follow the symlink -- the
@@ -21,29 +19,20 @@ where this machine can read it, a missing url is proposed and a contradicting on
 Where it cannot -- Drive not running, another OS, a folder that does not carry it --
 nothing is said about url beyond the shape of a declared one.
 
-The git section exists because the structure was never the part that could hurt you.
-A brain declares bindings in its root README -- remote, identity -- and those are the
-things whose failure is silent and unrecoverable. Structure problems are a tidy-up;
-a work brain pushed to a personal account is not. Git also says what the tree cannot:
-which files exist only on this machine, which tracked files are large enough to weigh on
-history for good, and whether the .gitignore keeps binaries out of inbox/. --no-git
-skips every one of those queries. A query that fails or times out is a WARN, and what it
-would have counted is "not checked" -- never zero, which would be an all-clear.
+Structure only. A brain is a folder of plain files and needs no sync; whatever carries it
+between machines is checked by the itakua-sync skill's own script, never from here.
 
 --report writes status.html at the brain root once the checks finish: the same findings,
-plus each node's inbox, undistilled log entries, limbo and machine-local files, as one
-static page from assets/status-page.html. Without it the validator writes nothing.
+plus each node's inbox, undistilled log entries and limbo, as one static page from
+assets/status-page.html. Without it the validator writes nothing.
 """
 import os, sys, json, pathlib, re, subprocess, unicodedata, datetime, html, platform
 import shutil, string, urllib.parse
 
 SLOTS = ("notes", "log", "docs", "inbox")
-LEGACY = "_tmp"                  # the slot inbox/ replaced in 0.5.0
 REQUIRED = ("notes", "log")
 ROOT_INBOX = "00-inbox"
-LARGE = 1024 * 1024              # a tracked file in a slot above this gets a warning
 REPORT = "status.html"
-GIT_TIMEOUT = 10                 # seconds; a slower query is reported, never read as empty
 TEMPLATE = pathlib.Path(__file__).resolve().parent.parent / "assets" / "status-page.html"
 
 # Findings, each as (node, message): node is the NFC path of the node it is about, or None
@@ -52,11 +41,9 @@ problems, warns, notes = [], [], []
 # What the status page shows beside the findings, by node (None is the brain). Filled by
 # the same checks that print, so every number on the page is one the text output gave.
 facts = {}
-# Every directory under spaces/, NFC-keyed: container, node, slot, inslot, limbo, legacy
+# Every directory under spaces/, NFC-keyed: container, node, slot, inslot, limbo
 # or orphan. Kept after the walk so later checks can tell slot content from limbo.
 status = {}
-# What a failed git query left unknown ("local", "ages"): shown as not checked, never 0.
-unchecked = set()
 
 
 def problem(msg, node=None):
@@ -103,7 +90,7 @@ def scan(root):
 
         if pstat in ("slot", "inslot"):
             status[here] = "inslot"
-        elif pstat in ("orphan", "legacy"):
+        elif pstat == "orphan":
             status[here] = pstat                  # already reported at the top
         elif pstat == "limbo":
             status[here] = "limbo"
@@ -114,11 +101,6 @@ def scan(root):
                      f"too", node=node_of(parent))
         elif base in SLOTS and pstat == "node":
             status[here] = "slot"
-        elif base == LEGACY and pstat == "node":
-            status[here] = "legacy"
-            fact(parent)["legacy"] = rel
-            note(f"{rel}/ is a legacy _tmp/ -- not a slot since 0.5.0 and still "
-                 f"gitignored; move what should be filed into inbox/ by hand", node=parent)
         elif "README.md" in filenames:
             status[here] = "node"
             found.append(pathlib.Path(dirpath))
@@ -173,47 +155,49 @@ def inbox_items(inbox):
     return items
 
 
-def first_added(pairs):
-    """When git first saw each inbox file, by path: one `git log` over every inbox.
+def captured_at(item):
+    """The `captured_at:` a capture declares, as a timestamp, or None.
 
-    A clone or checkout resets ctime, so on a fresh clone every tracked item would look
-    like it arrived today. The commit that added it does not move. None when the history
-    could not be read.
+    Only a .md item is read, and only its frontmatter; a value that does not parse as an
+    ISO 8601 date or datetime is ignored, as is anything else about the file.
     """
-    paths = [str(path) for _, path in pairs]
-    if not paths:
-        return {}
-    out = git_query("Inbox ages", "log", "--diff-filter=A", "--relative", "-z",
-                    "--name-only", "--format=%x01%ct", "--", *paths)
-    if out is None:
-        unchecked.add("ages")
+    if item.suffix.lower() != ".md":
         return None
-    added, when = {}, None
-    for token in out.split("\0"):
-        token = token.lstrip("\n")
-        if token.startswith("\x01"):
-            when = int(token[1:])
-        elif token and when is not None:
-            added.setdefault(nfc(token), when)    # newest first: the current file's add
-    return added
+    try:
+        with open(item, encoding="utf-8", errors="replace") as f:
+            head = f.read(4096)
+    except OSError:
+        return None
+    for line in frontmatter(head):
+        m = re.match(r"captured_at:(.*)$", line)
+        if not m:
+            continue
+        value = scalar(m.group(1)) or ""
+        try:
+            when = datetime.datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        if when.tzinfo is None:
+            when = when.astimezone()
+        return when.timestamp()
+    return None
 
 
-def check_inbox(pairs, added):
+def check_inbox(pairs):
     """One note per inbox with something in it: how many, and since when.
 
-    An item has waited since it arrived: the earlier of its ctime, which a move, copy,
-    download or checkout sets, and the commit that added it. Never mtime: a 2019 PDF
+    An item has waited since it arrived: the earlier of its ctime, which a move, copy or
+    download sets, and the `captured_at` a capture declares. Never mtime: a 2019 PDF
     dropped in today has not waited since 2019. ctime also moves on any metadata change
-    (an edit, a chmod, an app tagging the file it opens), so an untracked item can look
-    newer than it is, never older. With `added` None the history was unreadable, and
-    ages are not checked rather than guessed from a ctime a checkout may have reset.
+    (an edit, a chmod, an app tagging the file it opens), so an item can look newer than
+    it is, never older; a capture's own stamp survives that, and a fresh copy of a brain.
     """
     today = datetime.date.today()
     for node, inbox in pairs:
         items = inbox_items(inbox)
         stamps = []
-        for item in items if added is not None else ():
-            times = [added[k] for k in (nfc(item.as_posix()),) if k in added]
+        for item in items:
+            times = [t for t in (captured_at(item),) if t is not None]
             try:
                 times.append(item.lstat().st_ctime)
             except OSError:
@@ -224,8 +208,7 @@ def check_inbox(pairs, added):
         days = (today - oldest).days if oldest else None
         fact(node)["inbox"] = {"count": len(items), "oldest": oldest, "days": days}
         if items:
-            age = (", oldest not checked" if added is None else
-                   f", oldest {oldest.isoformat()} ({days} day(s))" if oldest else "")
+            age = f", oldest {oldest.isoformat()} ({days} day(s))" if oldest else ""
             note(f"{inbox}/: {len(items)} item(s){age}", node=node)
 
 
@@ -257,7 +240,7 @@ def check_distilled(found):
                  f"distilled_into -- nobody has looked yet", node=key(n))
 
 
-# --- what git says about the tree --------------------------------------------------
+# --- helpers ----------------------------------------------------------------------
 
 def node_of(path):
     """The nearest node at or above `path`, or None when it is not inside one."""
@@ -267,66 +250,6 @@ def node_of(path):
             return d
         d = os.path.dirname(d)
     return None
-
-
-def check_local_only():
-    """Files git ignores under spaces/ and 00-inbox/: they exist on this machine only.
-
-    docs/drive is excluded (the cloud holds it), and so are dotfiles and legacy _tmp/,
-    which is already reported as a whole.
-    """
-    out = git_query("Files only on this machine", "ls-files", "-z", "-o", "-i",
-                    "--exclude-standard", "--", "spaces", ROOT_INBOX)
-    if out is None:
-        unchecked.add("local")
-        return
-    by_node = {}
-    for path in out.split("\0"):
-        folder = os.path.dirname(path)
-        if not path or any(part.startswith(".") for part in path.split("/")):
-            continue
-        if status.get(nfc(folder)) == "legacy":
-            continue
-        if path.endswith("/docs/drive") and status.get(nfc(folder)) == "slot":
-            continue                              # the symlink itself; git never follows it
-        by_node.setdefault(node_of(folder), []).append(path)
-    for node, paths in sorted(by_node.items(), key=lambda kv: kv[0] or ""):
-        shown = [os.path.relpath(p, node) if node else p for p in paths]
-        fact(node)["local_only"] = shown
-        more = f", and {len(shown) - 5} more" if len(shown) > 5 else ""
-        where = f"{node}/: {len(paths)} file(s)" if node else \
-            f"{len(paths)} file(s) outside any node"
-        note(f"{where} only on this machine (ignored by git, outside docs/drive): "
-             f"{', '.join(shown[:5])}{more}", node=node)
-
-
-def check_sizes():
-    """Tracked files in a slot above LARGE: git history keeps them for good."""
-    out = git_query("Tracked files over 1 MB", "ls-files", "-z", "--", "spaces")
-    for path in (out or "").split("\0"):           # None: already warned
-        if not path or status.get(nfc(os.path.dirname(path))) not in ("slot", "inslot"):
-            continue
-        try:
-            size = os.lstat(path).st_size
-        except OSError:
-            continue
-        if size > LARGE:
-            warn(f"{path} is {size / LARGE:.1f} MB and tracked by git -- history keeps "
-                 f"every version; move it to docs/drive unless it must be versioned",
-                 node=node_of(os.path.dirname(path)))
-
-
-def check_allowlist(found):
-    """Ask git whether a binary dropped in a real inbox, or in 00-inbox/, is ignored."""
-    probes = [n / "inbox" for n in found if (n / "inbox").is_dir()][:1]
-    if pathlib.Path(ROOT_INBOX).is_dir():
-        probes.append(pathlib.Path(ROOT_INBOX))
-    for inbox in probes:
-        probe = (inbox / "capture.heic").as_posix()
-        if git_ignores(f"The {inbox.name}/ allowlist", probe, "--no-index") is False:
-            warn(f".gitignore would commit binaries dropped in {inbox.name}/ ({probe} is "
-                 f"not ignored) -- add the inbox allowlist the itakua-map skill gives, so "
-                 f"only text is tracked there")
 
 
 # --- artifact layer ---------------------------------------------------------------
@@ -492,7 +415,7 @@ def declared_artifacts(text):
 
 
 def drive_root_of(target):
-    """'/Users/x/.../GoogleDrive-x/My Drive/Guitarra' -> 'My Drive/Guitarra', else None."""
+    """'/Users/x/.../GoogleDrive-x/My Drive/House' -> 'My Drive/House', else None."""
     parts = [nfc(p) for p in re.split(r"[\\/]+", target) if p]
     for i, part in enumerate(parts):
         if part in DRIVE_ANCHORS:
@@ -658,159 +581,6 @@ def check_artifact_store(found):
         check_artifact_url(declared, readme, drive, folder, at)
 
 
-# --- git state -------------------------------------------------------------------
-
-def git_call(*args):
-    """Run git: (result, None), or (None, reason) when it cannot run or times out."""
-    try:
-        return subprocess.run(("git",) + args, capture_output=True, text=True,
-                              timeout=GIT_TIMEOUT), None
-    except subprocess.TimeoutExpired:
-        return None, f"timed out after {GIT_TIMEOUT} s"
-    except (OSError, subprocess.SubprocessError) as e:
-        return None, str(e) or type(e).__name__
-
-
-def git_failed(what, args, result, reason):
-    if result is not None:
-        reason = (result.stderr.strip().splitlines() or
-                  [f"exit status {result.returncode}"])[0]
-    warn(f"{what} not checked: `git {args[0]}` failed ({reason}) -- run the validator "
-         f"again")
-
-
-def git_query(what, *args):
-    """The stdout of a query a check depends on, or None after a WARN that says so.
-
-    A failed query must never read as an empty answer. "0 files only on this machine"
-    is an all-clear, and git timing out is not one.
-    """
-    result, reason = git_call(*args)
-    if result is not None and result.returncode == 0:
-        return result.stdout
-    git_failed(what, args, result, reason)
-    return None
-
-
-def git_ignores(what, path, *flags):
-    """Whether git ignores `path`: True or False, or None after a WARN when git fails."""
-    args = ("check-ignore", "-q", *flags, path)
-    result, reason = git_call(*args)
-    if result is not None and result.returncode in (0, 1):
-        return result.returncode == 0
-    git_failed(what, args, result, reason)
-    return None
-
-
-def git_raw(*args):
-    """git's stdout as is, or None when git fails. Only for lookups where failing means
-    absent, like an unset config key; anything a check counts goes through git_query."""
-    result, _ = git_call(*args)
-    return result.stdout if result is not None and result.returncode == 0 else None
-
-
-def git(*args):
-    out = git_raw(*args)
-    return out.strip() if out is not None else None
-
-
-def declared_bindings():
-    """Read the bindings table out of the root README, if there is one.
-
-    The table is the brain's own statement of what it expects. Nothing else on disk
-    knows whether a remote is a mistake or the plan.
-    """
-    out = {}
-    readme = pathlib.Path("README.md")
-    if not readme.is_file():
-        return out
-    for line in readme.read_text(encoding="utf-8").splitlines():
-        if not line.strip().startswith("|"):
-            continue
-        cells = [c.strip() for c in line.strip().strip("|").split("|")]
-        if len(cells) < 2:
-            continue
-        # Only the first two columns are read. A brain is free to add its own -- a
-        # constraint/preference marker, a note -- without the table stopping being
-        # machine-readable.
-        key = cells[0].replace("*", "").strip().lower()
-        if key in ("git remote", "git identity", "path"):
-            out[key] = cells[1]
-    return out
-
-
-def check_git():
-    if git("rev-parse", "--git-dir") is None:
-        fact(None)["git"] = "not a git repository"
-        note("not a git repository -- git bindings not checked")
-        return
-
-    declared = declared_bindings()
-    listed = git_query("Git remote", "remote")
-    remotes = None if listed is None else [r for r in listed.splitlines() if r.strip()]
-    local_name = git("config", "--local", "user.name")
-    local_mail = git("config", "--local", "user.email")
-    global_mail = git("config", "--global", "user.email")
-
-    # --- remote ---
-    decl_remote = declared.get("git remote", "")
-    if remotes is None:
-        fact(None)["remote"] = "not checked"     # the WARN says why
-    elif remotes:
-        urls = ", ".join(f"{r} -> {git('remote', 'get-url', r) or '?'}" for r in remotes)
-        fact(None)["remote"] = urls
-        if re.search(r"\bnone\b", decl_remote, re.I) and "none yet" not in decl_remote.lower():
-            problem(
-                f"README declares NO REMOTE, and {len(remotes)} is configured: {urls} "
-                f"-- if this brain holds material that must not be published, this is "
-                f"the failure the declaration exists to prevent")
-        else:
-            note(f"remote(s): {urls}")
-    else:
-        fact(None)["remote"] = "none"
-        note("no remote configured")
-    fact(None)["identity"] = (f"{local_name or '?'} <{local_mail}>" if local_mail else
-                              f"not set here (global <{global_mail}>)" if global_mail else
-                              "not set")
-
-    # --- identity ---
-    if not local_mail:
-        if global_mail:
-            problem(
-                f"no repository-local git identity -- commits here will be authored as "
-                f"the GLOBAL identity <{global_mail}>. Set one: "
-                f"git config --local user.email you@example.com; load itakua-setup to "
-                f"repair the machine-local binding")
-        else:
-            problem(
-                "no git identity, local or global -- commits will fail or be authored "
-                "by a guess. Load itakua-setup and set a local one"
-            )
-    else:
-        if global_mail and global_mail == local_mail:
-            note(f"local identity <{local_mail}> is the same as the global one")
-        m = re.search(r"([^<>|*]+?)\s*<([^<>@\s]+@[^<>@\s]+)>", declared.get("git identity", ""))
-        if m:
-            want_name, want_mail = m.group(1).strip(), m.group(2).strip()
-            if want_mail != local_mail:
-                problem(f"README declares identity <{want_mail}>, repository is "
-                        f"configured as <{local_mail}> -- load itakua-setup to "
-                        f"repair the machine-local binding")
-            elif want_name != (local_name or ""):
-                note(f"README declares name '{want_name}', repository has "
-                     f"'{local_name}' -- load itakua-setup if the declared "
-                     f"identity should be restored")
-            else:
-                note(f"identity matches the README: {local_name} <{local_mail}>")
-        else:
-            note(f"identity: {local_name} <{local_mail}> (README declares none)")
-
-    # --- the spine exists at all ---
-    for f in ("README.md", ".gitignore"):
-        if not pathlib.Path(f).is_file():
-            note(f"no {f} at the repository root")
-
-
 # --- status page -------------------------------------------------------------------
 
 LEVELS = (("problem", "PROBLEM", problems), ("warn", "WARN", warns), ("note", "note", notes))
@@ -854,8 +624,8 @@ def attention_html():
 def notes_html():
     """Notes, with the ones that differ only in their node folded into one line.
 
-    Ten nodes with a legacy _tmp/ make ten notes that say the same thing; the page shows
-    the sentence once and lists the nodes under it.
+    Ten nodes with the same limbo folder make ten notes that say the same thing; the page
+    shows the sentence once and lists the nodes under it.
     """
     groups = {}
     for at, msg in notes:
@@ -887,20 +657,10 @@ def inbox_cells(info):
     if info is None:
         return '<td class="z">–</td><td class="z">–</td>'
     cells = count_cell(info["count"], "inbox")
-    if not info["count"]:
-        return cells + '<td class="z">–</td>'
-    if "ages" in unchecked:
-        return cells + '<td class="quiet" title="oldest not checked: git failed">not checked</td>'
-    if info["days"] is None:
+    if not info["count"] or info["days"] is None:
         return cells + '<td class="z">–</td>'
     oldest = info["oldest"].isoformat() if info["oldest"] else ""
     return cells + f'<td title="{esc(oldest)}">{plural(info["days"], "day")}</td>'
-
-
-def local_cell(paths, in_git):
-    if not in_git or "local" in unchecked:
-        return '<td class="quiet">not checked</td>'
-    return count_cell(len(paths), "local", attn=False)
 
 
 DRIVE_CHIPS = {"linked": ("c-ok", "linked"), "unused docs/": ("c-muted", "unused")}
@@ -915,7 +675,7 @@ def drive_cell(f):
     return (f'<td><span class="chip {cls}" title="{esc(title)}">{esc(word)}</span></td>')
 
 
-def node_row(node, in_git):
+def node_row(node):
     f = facts.get(node, {})
     depth = max(node.count("/") - 1, 0)
     leaf = node.rsplit("/", 1)[-1]
@@ -924,8 +684,6 @@ def node_row(node, in_git):
         k = sum(1 for at, _ in items if at == node)
         if k:
             chips += f'<span class="chip c-{cls}">{plural(k, word)}</span>'
-    if f.get("legacy"):
-        chips += '<span class="chip c-muted" title="legacy _tmp/">_tmp</span>'
     branch = '<span class="branch">└</span>' if depth else ""
     undistilled = f.get("undistilled")
     limbo = f.get("limbo", [])
@@ -937,25 +695,18 @@ def node_row(node, in_git):
             + ('<td class="z">–</td>' if undistilled is None else
                count_cell(undistilled, "undistilled"))
             + count_cell(len(limbo), attn=False, title=", ".join(limbo))
-            + local_cell(f.get("local_only", []), in_git)
             + drive_cell(f)
             + "</tr>")
 
 
-def nodes_html(found, in_git):
+def nodes_html(found):
     if not found:
         return '<p class="quiet">No nodes yet.</p>'
-    rows = "".join(node_row(key(n), in_git) for n in sorted(found))
+    rows = "".join(node_row(key(n)) for n in sorted(found))
     head = ("<tr><th>Node</th><th>Inbox</th><th>Oldest</th><th>Undistilled</th>"
-            "<th>Limbo</th><th>Local only</th><th>Drive</th></tr>")
-    notes = []
-    if "ages" in unchecked:
-        notes.append("Inbox ages: oldest not checked: git failed.")
-    if in_git and "local" in unchecked:
-        notes.append("Files only on this machine: not checked: git failed.")
-    foot = "".join(f'<p class="footnote">{n}</p>' for n in notes)
+            "<th>Limbo</th><th>Drive</th></tr>")
     return (f'<div class="scroll"><table><thead>{head}</thead><tbody>{rows}</tbody>'
-            f'</table></div>{foot}')
+            f'</table></div>')
 
 
 def inbox_html(info):
@@ -963,25 +714,11 @@ def inbox_html(info):
         return '<span class="quiet">no inbox</span>'
     if not info["count"]:
         return '<span data-count="inbox">0</span> <span class="quiet">items</span>'
-    if "ages" in unchecked:
-        age = ' · <span class="quiet">oldest not checked: git failed</span>'
-    elif info["oldest"]:
+    if info["oldest"]:
         age = esc(f' · oldest {info["oldest"].isoformat()} ({plural(info["days"], "day")})')
     else:
         age = ""
     return f'<strong class="n" data-count="inbox">{info["count"]}</strong> item(s){age}'
-
-
-def local_html(paths, in_git):
-    if not in_git:
-        return '<span class="quiet">not checked without git</span>'
-    if "local" in unchecked:
-        return '<span class="quiet">not checked: git failed</span>'
-    if not paths:
-        return '<span data-count="local">0</span> <span class="quiet">files</span>'
-    items = "".join(f"<li>{esc(p)}</li>" for p in paths)
-    return (f'<details><summary><strong data-count="local">{len(paths)}</strong> '
-            f'file(s), ignored by git</summary><ul>{items}</ul></details>')
 
 
 def facts_html(rows):
@@ -989,32 +726,15 @@ def facts_html(rows):
             "".join(f"<dt>{label}</dt><dd>{value}</dd>" for label, value in rows) + "</dl>")
 
 
-def brain_html(found, git_mode):
+def brain_html():
     f = facts.get(None, {})
-    if git_mode == "skipped":
-        remote = identity = '<span class="quiet">not checked (--no-git)</span>'
-    elif f.get("git"):
-        remote = identity = esc(f["git"])
-    else:
-        remote, identity = esc(f.get("remote", "?")), esc(f.get("identity", "?"))
-    rows = [("Git remote", remote), ("Git identity", identity)]
+    rows = [("Path", esc(pathlib.Path.cwd()))]
     if pathlib.Path(ROOT_INBOX).is_dir():
         rows.append((f"{ROOT_INBOX}/", inbox_html(f.get("inbox"))))
-    rows.append(("Outside any node, only on this machine",
-                 local_html(f.get("local_only", []), git_mode == "used")))
-    # Every node's machine-local files in one list: the table only counts them.
-    if git_mode == "used" and "local" not in unchecked:
-        spread = [p for n in sorted(found)
-                  for p in facts.get(key(n), {}).get("local_only", [])]
-        if spread:
-            items = "".join(f"<li>{esc(p)}</li>" for p in spread)
-            rows.append(("In nodes, only on this machine",
-                         f'<details><summary>{plural(len(spread), "file")}</summary>'
-                         f'<ul>{items}</ul></details>'))
     return f'<div data-node="(brain)">{facts_html(rows)}</div>'
 
 
-def tiles_html(found, git_mode):
+def tiles_html(found):
     every = [facts.get(key(n), {}) for n in found] + [facts.get(None, {})]
     inbox = [f["inbox"] for f in every if f.get("inbox")]
     oldest = max((i["days"] for i in inbox if i["days"] is not None), default=None)
@@ -1025,17 +745,10 @@ def tiles_html(found, git_mode):
         ("warnings", len(warns), "Warnings", "warn"),
         ("notes", len(notes), "Notes", ""),
         ("inbox", waiting, "Inbox items", "attn"),
-        ("oldest", "–" if oldest is None else oldest,
-         "Days the oldest has waited" + (" · not checked" if "ages" in unchecked else ""),
-         "attn"),
+        ("oldest", "–" if oldest is None else oldest, "Days the oldest has waited", "attn"),
         ("undistilled", undistilled, "Undistilled log entries", "attn"),
         ("limbo", sum(len(f.get("limbo", [])) for f in every), "Limbo folders", ""),
     ]
-    if git_mode == "used" and "local" not in unchecked:
-        tiles.append(("local", sum(len(f.get("local_only", [])) for f in every),
-                      "Files only on this machine", ""))
-    else:
-        tiles.append(("local", "–", "Files only on this machine · not checked", ""))
     out = []
     for name, value, label, cls in tiles:
         if not value or value == "–":
@@ -1045,7 +758,7 @@ def tiles_html(found, git_mode):
     return "".join(out)
 
 
-def write_report(found, git_mode, verdict):
+def write_report(found, verdict):
     """Render the status page from this run's findings and facts, then swap it in."""
     try:
         template = string.Template(TEMPLATE.read_text(encoding="utf-8"))
@@ -1058,11 +771,11 @@ def write_report(found, git_mode, verdict):
         host=esc(platform.node() or "an unnamed machine"),
         verdict_class="bad" if problems else "ok",
         verdict=esc(verdict),
-        tiles=tiles_html(found, git_mode),
+        tiles=tiles_html(found),
         attention=attention_html(),
-        nodes=nodes_html(found, git_mode == "used"),
+        nodes=nodes_html(found),
         node_count=len(found),
-        brain_section=brain_html(found, git_mode),
+        brain_section=brain_html(),
         notes=notes_html(),
     )
     tmp = pathlib.Path(f".{REPORT}.tmp")
@@ -1078,36 +791,20 @@ def write_report(found, git_mode, verdict):
 def main():
     args = sys.argv[1:]
     for a in args:
-        if a not in ("--git", "--no-git", "--report"):
-            sys.exit(f"usage: check-structure.py [--no-git] [--report]\nunknown option {a}")
+        if a != "--report":
+            sys.exit(f"usage: check-structure.py [--report]\nunknown option {a}")
 
     root = pathlib.Path("spaces")
     if not root.is_dir():
         sys.exit("no spaces/ -- run from the repo root. Every brain has spaces/ at its "
                  "root; it is where all content lives")
 
-    if pathlib.Path("areas").exists():
-        problem("legacy areas/ exists beside spaces/ -- new Itakua brains use only "
-                "spaces/. Do not migrate an existing brain without owner approval")
-
-    in_git = "--no-git" not in args and git("rev-parse", "--git-dir") is not None
     found = scan(root)
     check_nodes(found)
-    pairs = inboxes(found)
-    check_inbox(pairs, first_added(pairs) if in_git else {})
+    check_inbox(inboxes(found))
     check_distilled(found)
     check_artifacts(found)
     check_artifact_store(found)
-    if in_git:
-        check_local_only()
-        check_sizes()
-        check_allowlist(found)
-    if "--no-git" not in args:
-        check_git()
-    if "--report" in args and in_git and \
-            git_ignores(f"The {REPORT} ignore rule", REPORT) is False:
-        warn(f"{REPORT} is not gitignored -- add /{REPORT} to .gitignore; the page is "
-             f"regenerated per machine and is never committed")
 
     print(f"{len(found)} nodes checked: " + ", ".join(str(n) for n in sorted(found)))
     for _, m in notes:
@@ -1117,12 +814,11 @@ def main():
     for _, m in problems:
         print(f"  PROBLEM  {m}")
     tail = f" {len(warns)} warning(s)." if warns else ""
-    verdict = ("OK -- structure and bindings are consistent." + tail if not problems
+    verdict = ("OK -- structure is consistent." + tail if not problems
                else f"{len(problems)} problem(s).{tail}")
     print("\n" + verdict)
     if "--report" in args:
-        write_report(found, "skipped" if "--no-git" in args else
-                     "used" if in_git else "unavailable", verdict)
+        write_report(found, verdict)
         print(f"wrote {REPORT}")
     return 1 if problems else 0
 

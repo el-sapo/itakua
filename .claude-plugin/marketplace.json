@@ -7,7 +7,7 @@
     {
       "name": "itakua",
       "source": "./plugins/itakua",
-      "description": "Itakua knowledge framework: safe node operations with itakua-map and portable setup with itakua-setup."
+      "description": "Itakua knowledge framework: safe node operations with itakua-map, brain setup with itakua-setup, and optional sync with itakua-sync."
     }
   ],
   "description": "Itakua: a portable, agent-friendly framework for personal knowledge bases."

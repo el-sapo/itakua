@@ -3,7 +3,7 @@
 The page is a static snapshot of one validator run: the same findings, plus per-node
 inbox, log and machine-local counts. These tests run the public scripts against small
 temporary brains and check what a user would: that a plain run writes nothing, that the
-page is self-contained and leaves git clean, and that its numbers are the text output's.
+page is self-contained, and that its numbers are the text output's.
 """
 
 import os
@@ -32,16 +32,14 @@ def write(path, text="captured\n"):
 
 
 def tree(brain):
-    """Every path in the brain outside .git, to prove a run wrote nothing."""
-    return sorted(str(p.relative_to(brain)) for p in brain.rglob("*")
-                  if ".git" not in p.relative_to(brain).parts)
+    """Every path in the brain, to prove a run wrote nothing."""
+    return sorted(str(p.relative_to(brain)) for p in brain.rglob("*"))
 
 
 class StatusPageTests(unittest.TestCase):
     def brain(self, temp):
         brain = Path(temp) / "brain"
-        created = run(["bash", str(NEW_BRAIN), str(brain), "Status Brain",
-                       "--identity", "Test User <test@example.com>"])
+        created = run(["bash", str(NEW_BRAIN), str(brain), "Status Brain"])
         self.assertEqual(created.returncode, 0, created.stdout + created.stderr)
         for node in ("spaces/guitar", "spaces/guitar/songs", "spaces/work"):
             made = run(["bash", str(NEW_NODE), node], cwd=brain)
@@ -59,7 +57,6 @@ class StatusPageTests(unittest.TestCase):
         write(work / "log" / "older" / "2026-08-01-call.md", "---\ntype: log\n---\n")
         write(work / "log" / "2026-09-03-call.md", "---\ntype: log\n---\n")
         write(work / "scratch" / "idea.md")
-        write(guitar / "_tmp" / "old.m4a")
 
     def validate(self, brain, *args):
         result = run([sys.executable, str(VALIDATOR), *args], cwd=brain)
@@ -110,31 +107,6 @@ class StatusPageTests(unittest.TestCase):
                 self.assertNotIn(fetch, page)
             self.assertIn("prefers-color-scheme: dark", page)
 
-    def test_git_status_is_unchanged_by_the_report(self):
-        with tempfile.TemporaryDirectory() as temp:
-            brain = self.brain(temp)
-            self.populate(brain)
-            before = run(["git", "status", "--porcelain"], cwd=brain).stdout
-
-            result = self.validate(brain, "--report")
-
-            self.assertTrue((brain / "status.html").is_file())
-            self.assertEqual(run(["git", "status", "--porcelain"], cwd=brain).stdout, before)
-            self.assertNotIn("status.html is not gitignored", result.stdout)
-
-    def test_unignored_page_is_warned_and_still_written(self):
-        with tempfile.TemporaryDirectory() as temp:
-            brain = self.brain(temp)
-            gitignore = brain / ".gitignore"
-            gitignore.write_text(gitignore.read_text(encoding="utf-8")
-                                 .replace("/status.html\n", ""), encoding="utf-8")
-
-            result = self.validate(brain, "--report")
-
-            self.assertIn("status.html is not gitignored", result.stdout)
-            self.assertTrue((brain / "status.html").is_file())
-            self.assertIn("status.html is not gitignored", self.page(brain))
-
     def test_page_numbers_match_the_text_output(self):
         with tempfile.TemporaryDirectory() as temp:
             brain = self.brain(temp)
@@ -168,46 +140,43 @@ class StatusPageTests(unittest.TestCase):
             self.assertEqual(total("inbox"), sum(inbox.values()) + root_inbox)
             self.assertEqual(total("undistilled"), sum(logs.values()))
             self.assertEqual(total("limbo"), text.count("is limbo"))
-            local = re.search(r"spaces/guitar/: (\d+) file\(s\) only on this machine", text)
-            self.assertEqual(self.count(self.section(page, "spaces/guitar"), "local"),
-                             int(local.group(1)))
 
     def test_brain_derived_text_is_escaped(self):
         with tempfile.TemporaryDirectory() as temp:
             brain = self.brain(temp)
-            write(brain / "spaces" / "guitar" / "inbox" / "a&b <i>.heic")
+            (brain / "spaces" / "guitar" / "a&b <i>").mkdir()
 
             self.validate(brain, "--report")
 
             page = self.page(brain)
-            self.assertIn("a&amp;b &lt;i&gt;.heic", page)
-            self.assertNotIn("<i>.heic", page)
+            self.assertIn("a&amp;b &lt;i&gt;/ is limbo", page)
+            self.assertNotIn("<i>/ is limbo", page)
 
-    def test_report_without_git_says_what_it_skipped(self):
+    def test_the_page_names_no_sync_tool(self):
         with tempfile.TemporaryDirectory() as temp:
             brain = self.brain(temp)
             self.populate(brain)
             (brain / "spaces" / "stray").mkdir()
 
-            result = self.validate(brain, "--no-git", "--report")
+            result = self.validate(brain, "--report")
 
             self.assertEqual(result.returncode, 1, result.stdout)
             page = self.page(brain)
-            self.assertIn("not checked (--no-git)", page)
             self.assertIn("1 problem(s).", page)
             self.assertIn("spaces/stray/ is neither a slot nor a node", page)
+            self.assertNotIn("git", page.lower())
 
     def test_notes_that_differ_only_by_node_are_folded(self):
         with tempfile.TemporaryDirectory() as temp:
             brain = self.brain(temp)
             for node in ("guitar", "work"):
-                write(brain / "spaces" / node / "_tmp" / "old.txt")
+                write(brain / "spaces" / node / "scratch" / "old.txt")
 
             result = self.validate(brain, "--report")
 
-            self.assertEqual(result.stdout.count("is a legacy _tmp/"), 2)
+            self.assertEqual(result.stdout.count("/scratch/ is limbo"), 2)
             page = self.page(brain)
-            self.assertEqual(page.count("is a legacy _tmp/"), 1)
+            self.assertEqual(page.count("/scratch/ is limbo"), 1)
             self.assertIn("2 nodes", page)
             for node in ("spaces/guitar", "spaces/work"):
                 self.assertIn(f"<li>{node}</li>", page)

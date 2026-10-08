@@ -1,0 +1,4 @@
+interface:
+  display_name: "Itakua Sync"
+  short_description: "Add or check how an Itakua brain travels between machines"
+  default_prompt: "Use $itakua-sync to check this Itakua brain's sync against its README."
