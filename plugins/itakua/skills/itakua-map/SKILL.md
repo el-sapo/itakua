@@ -30,12 +30,9 @@ something you can read off its depth:
 
 | Node | Nested? | Ends? |
 |---|---|---|
-| `guitar` | no | no |
-| `gardening/huerta` | yes | **no** — a vegetable plot just goes on |
-| `consulting/client-x` | yes | yes — the engagement gets signed off |
-
-Do not import PARA here. PARA splits Projects from Areas *by lifecycle*; this splits *by
-containment*, and a nested node is free to run forever.
+| `french` | no | no |
+| `work/team` | yes | **no** — a team just goes on |
+| `house/renovation` | yes | yes — the work gets finished |
 
 ## The four slots
 
@@ -101,18 +98,19 @@ still a node missing its README, and the validator fails it.
 ```
 
 Question 1 is the one that goes wrong. **A parent's slots are not leftovers and not a
-dumping ground — they are the cross-cutting layer.** A guitar node's `notes/` holds what
-applies across repertoire, gear and theory; a fact about one song belongs to the song's
-node, or to a subfolder of `notes/` if that node does not exist yet.
+dumping ground — they are the cross-cutting layer.** A house node's `notes/` holds what
+applies to the whole house, the insurance and the running costs; a fact about the
+renovation belongs to the renovation's node, or to a subfolder of `notes/` if that node
+does not exist yet.
 
 **Every node's README states its own cross-cutting scope** under Conventions. Read it
 rather than guessing what "spans" means there.
 
 Three edges that come up:
 
-- **Does it generalise?** Ask: *would this still be true for a different song / client /
-  plot?* If yes it belongs to the parent — **regardless of where you learned it**. A fact
-  discovered while working on one song is not thereby a fact about that song.
+- **Does it generalise?** Ask: *would this still be true for a different job / project /
+  class?* If yes it belongs to the parent — **regardless of where you learned it**. A fact
+  discovered during the renovation is not thereby a fact about the renovation.
 - **Spans some but not all children?** Parent. The test is not *"does it cover
   everything"*, it is *"is it only about one child?"*
 - **Part general, part specific?** Split it. The general statement goes up, the specific
@@ -136,10 +134,9 @@ decisions that would otherwise clutter the parent's `log/`.
 
 | Example | Verdict |
 |---|---|
-| A client engagement — own interviews, own decisions, own end | **node** |
-| "the calendar quick-win for that client" | **subfolder** in the client's `notes/` — its events belong in the client's log |
-| A garden plot with its own planting log | **node** |
-| A recurring topic like "triads" | **subfolder** in `notes/` |
+| The renovation — own quotes, visits and decisions, own end | **node** |
+| The roof, one job in the renovation | **subfolder** in the renovation's `notes/` — its quotes belong in the renovation's log |
+| A recurring topic like "past tenses" | **subfolder** in `notes/` |
 
 **Bias towards not promoting.** A subfolder can be promoted later by adding a README and
 slots; demoting a node means unpicking paths and references. When unsure, leave it as
@@ -194,8 +191,8 @@ Keep the raw source only if **one** passes:
 | **Accountability** | Someone may challenge a claim and you need the receipt. Client work, money, consequences |
 | **Re-interpretation** | New information changes what the old source *means*, so you go back and re-read it. Iterative discovery |
 
-Lesson transcripts usually fail both — nobody audits what a teacher said, and lesson five
-never sends you back to lesson two. Client interviews usually pass both.
+Class transcripts usually fail both — nobody audits what a teacher said, and class five
+never sends you back to class two. A builder's quotes and contract pass accountability.
 
 **The asymmetry is not *whether* you preserve — it is *down to which layer*.** One node
 keeps the distilled knowledge plus a thin dated index; another keeps the full transcript
@@ -283,21 +280,13 @@ with `.heic`, `.webp`, `.epub` and whatever comes next.
 !**/inbox/**/.gitkeep
 ```
 
-`new-brain.sh` writes this block, plus the same for `/00-inbox/`. A brain that predates it
-gets the block added by hand; the validator warns when a binary in an inbox would be
-committed.
+`new-brain.sh` writes this block, plus the same for `/00-inbox/`. The validator warns when
+a brain's `.gitignore` would commit a binary in an inbox.
 
 When distilling a binary, tell the owner it exists only on this machine and recommend
 moving it to `docs/drive`. That is the expected workflow. Committing it with
 `git add -f` stays possible as an explicit owner override, and it is one of the cases
 that get a second ask (see **When the user overrides a rule**): history is permanent.
-
-### Legacy `_tmp/`
-
-Before 0.5.0 the fourth slot was `_tmp/`, gitignored manual staging. It is not renamed.
-`_tmp/` stays in `.gitignore`, so nothing sitting there is committed by accident;
-`inbox/` starts empty and the owner moves items across by hand. The validator reports a
-leftover `_tmp/` as a legacy note and no longer asks for its contract.
 
 ## The repository root
 
@@ -309,7 +298,7 @@ there is short and fixed:
 | `spaces/` | **Required.** All content; every node lives under it. `check-structure.py` refuses to run without it |
 | `00-inbox/` | Optional capture — where capture tools write, and anything not yet filed |
 | `README.md` | What this brain is, its **bindings table**, and how to stand it up from a clone |
-| `CLAUDE.md` / `AGENTS.md` | Three-line pointers to `README.md`. Pointers, never copies |
+| `CLAUDE.md` / `AGENTS.md` | Short pointers that tell an agent to load `itakua-map` and read `README.md`. Pointers, never copies |
 | `drive-map` | Optional committed mapping from node paths to artifact paths relative to the cloud root |
 | `.drive-map.local` | Optional gitignored absolute overrides for this machine only |
 | `status.html` | Optional, gitignored. The brain status page `check-structure.py --report` writes; generated per machine, never edited or committed |
@@ -357,7 +346,7 @@ For a tool that writes into a brain:
   type: capture
   source: dictalo        # who wrote it: dictalo, mcp, web-clipper, shortcut, ...
   kind: transcript       # transcript, web, note, file, ...
-  title: "Clase 12: tríadas"
+  title: "Class 12: past tenses"
   captured_at: 2026-10-06T19:42:11-03:00
   ---
   ```
@@ -446,16 +435,13 @@ distilled_into: []   # log entries only — the notes this event produced
 `capture` marks an inbox item a capture tool wrote. Its header follows **Captures**, not
 this block; the log entry that distils it carries `domain` and `date` as usual.
 
-**There is no `status:` field, and adding one back needs a reason.** It was tried: every
-one of the 33 files that carried it said `active`, so it distinguished nothing and
-trained readers to skip the frontmatter it sat in. It was also the last piece of a
-project-lifecycle model this framework does not use — nesting is containment, and
-whether a node ends is its own declaration, not a field. A node that has gone quiet says
-so in its README's opening line, where it can also say since when and why. Add the field
-back only when a script actually needs to read it, and only where that script looks.
+**There is no `status:` field.** Whether a node ends is its own declaration, not a field:
+a node that has gone quiet says so in its README's opening line, where it can also say
+since when and why. Add one only when a script needs to read it, and only where that
+script looks.
 
-`domain:` stays coarse — a file inside `spaces/consulting/client-x/` carries
-`domain: consulting`. The path already says which node it is in; `domain` exists to group
+`domain:` stays coarse — a file inside `spaces/house/renovation/` carries
+`domain: house`. The path already says which node it is in; `domain` exists to group
 across the repo, so its set of values stays small.
 
 Keep frontmatter flat. Complex YAML is a known parse-failure source. The one exception is
@@ -469,7 +455,7 @@ A node README whose `docs/drive` is linked declares the Drive folder behind it:
 ```yaml
 artifacts:
   provider: google-drive
-  root: My Drive/Guitarra
+  root: My Drive/House
   url: https://drive.google.com/drive/folders/<folder id>
 ```
 
@@ -480,7 +466,7 @@ open those files. Without the key, an agent has to infer from README prose which
 folder `docs/` is, then hunt for a cited file by title. With it, the handoff is explicit:
 an agent with its own Drive connector opens a cited artifact there, and that is intended.
 A path is not a link, though: a reader that offers a node's Drive documents as links to
-open — the Reader, an agent on the MCP server — cannot turn `My Drive/Guitarra` into one
+open — the Reader, an agent on the MCP server — cannot turn `My Drive/House` into one
 without the folder's Drive id. `url` carries it.
 
 - **Optional.** Only a node with a `docs/drive` link carries it. Every other node omits
@@ -491,7 +477,7 @@ without the folder's Drive id. `url` carries it.
   mapping `link-drive.sh` applies from `drive-map` and `.drive-map.local`, so
   `check-structure.py` proposes the value from this machine's mapping and warns when the
   key and that mapping disagree. Quote it when the folder name holds `: ` or ` #`
-  (`root: 'My Drive/Setlist #2'`); the validator's proposal already does.
+  (`root: 'My Drive/Flat #2'`); the validator's proposal already does.
 - `url` is optional: the folder's Drive link. `root` stays the name a person reads; `url`
   is where a reader opens it. It is never guessed. Take it from Drive's *Copy link* on the
   folder (a `?usp=sharing` tail is fine). On macOS, Drive for Desktop keeps a synced item's
@@ -511,15 +497,15 @@ without the folder's Drive id. `url` carries it.
 Nothing but Drive opens `docs/` (see `artifacts:` above), so how a note cites an artifact
 depends on whether anyone will want to open it.
 
-- **A reader or agent will want to open it** — a tab to play from, an inventory to check,
-  a contract to read: the citation carries the Drive URL. Make the `docs/` path the link
+- **A reader or agent will want to open it** — a quote to compare, homework to do, a
+  contract to read: the citation carries the Drive URL. Make the `docs/` path the link
   text, so one citation says both where the file sits in the tree and where to open it:
 
   ```markdown
-  Full tab in [`docs/drive/songs/rock esp/El pibe de los astilleros.docx`](https://drive.google.com/file/d/<id>/view).
+  The roofer's quote is [`docs/drive/quotes/Roofer quote.pdf`](https://drive.google.com/file/d/<id>/view).
   ```
 
-  Linking the title instead — `[My Gear.docx](https://drive.google.com/open?id=<id>)` —
+  Linking the title instead — `[Homework.gdoc](https://drive.google.com/open?id=<id>)` —
   also meets the rule. Prefer the path when you know it: a reader can join it to the
   node's `root` and name the folder.
 - **It is only context** — provenance, the source a note was distilled from: a path-only
@@ -536,7 +522,7 @@ its Drive id could be read: cite such a file through it, with the folder's `docs
 the link text, or take the file's link from Drive's *Copy link*.
 
 ```markdown
-Mockups in [`docs/drive/design/`](https://drive.google.com/drive/folders/<id>).
+Plans in [`docs/drive/renovation/`](https://drive.google.com/drive/folders/<id>).
 ```
 
 ## When a node goes dormant
@@ -602,7 +588,7 @@ context, that is the moment to build one — not before.
 | Script | Does |
 |---|---|
 | `new-node.sh` | Safely scaffolds a node with `notes/`, `log/`, `inbox/`, and the README template, without overwriting existing files |
-| `check-structure.py` | Validates every node and its local artifact attachment, warns when a linked node's README lacks the `artifacts:` key, declares it without a `docs/drive` link, or names a `root` this machine's mapping contradicts (proposing the `root` from that mapping), or a `url` that is not a Drive folder link; where this machine can read the linked folder's Drive id, it also proposes a missing `url` in a note and warns on one that names another folder, **and** checks the repository's git state — remote, identity — against the bindings declared in the root README. Notes limbo folders, a leftover `_tmp/`, each node's inbox count and oldest item, and the files that exist only on this machine; warns on tracked files over 1 MB in a slot and on a `.gitignore` that would commit inbox binaries. A git query that fails or times out is a warning, and what it would have counted shows as not checked, never as zero. `--no-git` skips every git query. `--report` also writes `status.html` at the brain root: one static dashboard that opens offline, with the verdict and totals, problems and warnings first, every node's counts in one table, and notes that differ only by node folded into one line; without it the validator writes nothing. Run after any restructure, and after anything that touches git |
+| `check-structure.py` | Validates every node and its local artifact attachment, warns when a linked node's README lacks the `artifacts:` key, declares it without a `docs/drive` link, or names a `root` this machine's mapping contradicts (proposing the `root` from that mapping), or a `url` that is not a Drive folder link; where this machine can read the linked folder's Drive id, it also proposes a missing `url` in a note and warns on one that names another folder, **and** checks the repository's git state — remote, identity — against the bindings declared in the root README. Notes limbo folders, each node's inbox count and oldest item, and the files that exist only on this machine; warns on tracked files over 1 MB in a slot and on a `.gitignore` that would commit inbox binaries. A git query that fails or times out is a warning, and what it would have counted shows as not checked, never as zero. `--no-git` skips every git query. `--report` also writes `status.html` at the brain root: one static dashboard that opens offline, with the verdict and totals, problems and warnings first, every node's counts in one table, and notes that differ only by node folded into one line; without it the validator writes nothing. Run after any restructure, and after anything that touches git |
 | `index-artifacts.py` | Regenerates a node's `docs/index.md` from its cloud folder, in the node's own language. Flags orphans and cloud-pointer files that cannot be read on disk. Its Link column gives each Google pointer file its Drive URL, and each other listed file the URL of the Drive id Drive for Desktop keeps on it on macOS, where this machine can read it. A cell it cannot fill keeps the link the previous index had for that same path, with a warning, so a machine that cannot read ids never blanks them; otherwise it stays empty, never guessed. A file still uploading, whose id is only temporary, gets no new link, and the run names it so it is regenerated later. A folder with more files than `COLLAPSE_OVER`, a constant in the script, is summarised by type with no cells, and when that drops links the previous index listed, the run says how many. Each folder heading carries the folder's own Drive link under the same rules, where its id can be read |
 
 These scripts live under this skill's `scripts/` directory. Resolve that directory for the

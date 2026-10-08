@@ -46,8 +46,8 @@ tags: []
 ## Conventions
 
 - **What this node's own slots hold:** <the cross-cutting layer — what spans its children.
-  e.g. "method that generalises across clients"; "what applies across repertoire, gear and
-  theory". If it has no children yet, say "everything about <node>, until it grows children">
+  e.g. "what applies to the whole house"; "how the team works, across projects". If it has
+  no children yet, say "everything about <node>, until it grows children">
 - **Does this node end?** <"No — ongoing." | "Yes — finished when <X>, signed off by <who>.">
   Nesting says nothing about this; declare it here.
 - Sub-work stays as subfolders in `notes/` unless it has **its own dated stream** — its

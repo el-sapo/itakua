@@ -1,7 +1,6 @@
 """Behavioral regressions for the inbox/ slot, limbo, and what git says about the tree.
 
-inbox/ replaced _tmp/ as the fourth slot in 0.5.0: text there is tracked, every other
-file stays on the machine, and any folder inside a node that is neither a slot nor a
+inbox/ is the fourth slot: text there is tracked, every other file stays on the machine, and any folder inside a node that is neither a slot nor a
 child node is limbo -- a note, never a failure. These tests run the public scripts against
 small temporary brains and assert only what a user sees: ignore rules, output lines and
 exit codes.
@@ -76,17 +75,15 @@ class InboxSlotTests(unittest.TestCase):
 
     # --- scaffolding ----------------------------------------------------------------
 
-    def test_new_node_creates_inbox_and_no_tmp(self):
+    def test_new_node_creates_inbox(self):
         with tempfile.TemporaryDirectory() as temp:
             brain, node = self.plain_brain(temp)
 
             result = self.validate(brain, "--no-git")
 
             self.assertTrue((node / "inbox" / ".gitkeep").is_file())
-            self.assertFalse((node / "_tmp").exists())
             readme = (node / "README.md").read_text(encoding="utf-8")
             self.assertIn("`inbox/`", readme)
-            self.assertNotIn("_tmp", readme)
             self.assertEqual(result.returncode, 0, result.stdout)
             self.assertEqual(self.lines(result, "WARN"), [], result.stdout)
             self.assertEqual(self.lines(result, "PROBLEM"), [], result.stdout)
@@ -95,8 +92,7 @@ class InboxSlotTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             brain, node = self.git_brain(temp)
             tracked = ["inbox/clip.md", "inbox/page.html", "inbox/sub/dictated.txt"]
-            local = ["inbox/photo.heic", "inbox/scan.pdf", "inbox/sub/book.epub",
-                     "_tmp/old-staging.md"]
+            local = ["inbox/photo.heic", "inbox/scan.pdf", "inbox/sub/book.epub"]
             for rel in tracked + local:
                 self.write(node / rel)
             root_tracked, root_local = brain / "00-inbox" / "n.md", brain / "00-inbox" / "p.heic"
@@ -113,20 +109,18 @@ class InboxSlotTests(unittest.TestCase):
             self.assertFalse(ignored(root_tracked))
             self.assertTrue(ignored(root_local))
 
-    # --- limbo and legacy -----------------------------------------------------------
+    # --- limbo ----------------------------------------------------------------------
 
-    def test_limbo_and_legacy_tmp_are_notes_and_pass(self):
+    def test_limbo_is_a_note_and_passes(self):
         with tempfile.TemporaryDirectory() as temp:
             brain, node = self.plain_brain(temp)
             self.write(node / "scratch" / "deeper" / "idea.md")
-            self.write(node / "_tmp" / "old.md")
 
             result = self.validate(brain, "--no-git")
 
             notes = "\n".join(self.lines(result, "note"))
             self.assertEqual(result.returncode, 0, result.stdout)
             self.assertIn("spaces/project/scratch/ is limbo", notes)
-            self.assertIn("spaces/project/_tmp/ is a legacy _tmp/", notes)
             self.assertNotIn("scratch/deeper", result.stdout)
             self.assertEqual(self.lines(result, "PROBLEM"), [], result.stdout)
 
@@ -235,7 +229,6 @@ class InboxSlotTests(unittest.TestCase):
             self.write(node / "inbox" / "clip.md")
             self.write(node / "inbox" / ".DS_Store")
             self.write(node / "docs" / "stray.pdf")
-            self.write(node / "_tmp" / "old.md")
             cloud = Path(temp) / "cloud"
             cloud.mkdir()
             (node / "docs" / "drive").symlink_to(cloud)
@@ -266,7 +259,7 @@ class InboxSlotTests(unittest.TestCase):
     def test_gitignore_without_the_inbox_allowlist_is_warned(self):
         with tempfile.TemporaryDirectory() as temp:
             brain, _ = self.plain_brain(temp)
-            (brain / ".gitignore").write_text("*.pdf\n_tmp/\n", encoding="utf-8")
+            (brain / ".gitignore").write_text("*.pdf\n", encoding="utf-8")
             for cmd in (["git", "init", "-q"],
                         ["git", "config", "--local", "user.name", "Test User"],
                         ["git", "config", "--local", "user.email", "test@example.com"]):

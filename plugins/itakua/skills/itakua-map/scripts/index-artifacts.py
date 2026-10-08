@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Regenerate a node's docs/index.md from the artifacts in its cloud folder.
 
-    python3 <this script> spaces/guitar
-    python3 <this script> spaces/guitar /path/to/drive/root
-    python3 <this script> spaces/guitar --lang en
+    python3 <this script> spaces/french
+    python3 <this script> spaces/french /path/to/drive/root
+    python3 <this script> spaces/french --lang en
 
 Run it from the brain's root. The regeneration line written into each index names the
 owning skill without persisting this machine's installed-skill or plugin-cache path.
@@ -16,7 +16,7 @@ chat can see. Regenerate it; never hand-edit.
 
 LANGUAGE: the index follows the NODE's language, detected from its own README and
 files, because SKILL.md says not to impose the framework's language on someone's
-material -- and this script used to do exactly that, emitting Spanish everywhere.
+material.
 The detected language is printed; override it with --lang es|en when it guesses wrong.
 
 LINKS: every per-file table carries a Link column, because the Reader and agents on the MCP
@@ -284,7 +284,7 @@ def domain_of(node):
     """Top-level NODE name, not the first path component.
 
     `domain:` groups files across the repo, so it must be the node a reader would
-    name -- 'guitar', not the container folder 'spaces' that every node shares.
+    name -- 'french', not the container folder 'spaces' that every node shares.
     """
     parts = [p for p in node.split("/") if p and p != "."]
     if parts and parts[0] == "spaces":

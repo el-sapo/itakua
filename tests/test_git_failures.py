@@ -118,7 +118,7 @@ class FailedGitQueryTests(unittest.TestCase):
         brain, _ = self.brain()
         # Neither the allowlist nor status.html is ignored, so a working git would warn
         # about both. A failing one must say it could not check, not that they are wrong.
-        (brain / ".gitignore").write_text("_tmp/\n", encoding="utf-8")
+        (brain / ".gitignore").write_text(".drive-map.local\n", encoding="utf-8")
 
         text, _ = self.validate(brain, "check-ignore")
 

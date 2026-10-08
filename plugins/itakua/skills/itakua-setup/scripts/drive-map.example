@@ -5,5 +5,5 @@
 # to link-drive.sh. Existing artifact folders must already exist; only explicit
 # `--convention` mode creates folders.
 #
-# guitar|Guitarra
-# automatizaciones/contador|AUTOMATIZACIONES/ALFO
+# french|French class
+# house/renovation|House/Renovation

@@ -139,8 +139,6 @@ write_file "$DEST/.gitignore" <<'EOF'
 .obsidian/
 .trash/
 .coda/
-# legacy staging, replaced by inbox/ in 0.5.0; whatever sits there stays local
-_tmp/
 .drive-map.local
 *.skill
 # generated per machine by check-structure.py --report; never committed
@@ -152,8 +150,8 @@ write_file "$DEST/drive-map" <<'EOF'
 # Format: <node path>|<path relative to the cloud artifact root>
 # Node paths are relative to spaces/.
 #
-# guitar|Guitarra
-# automatizaciones/contador|AUTOMATIZACIONES/ALFO
+# french|French class
+# house/renovation|House/Renovation
 EOF
 
 write_file "$DEST/CLAUDE.md" <<EOF

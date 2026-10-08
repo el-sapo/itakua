@@ -7,9 +7,8 @@
 
 A folder is either a SLOT (notes/ log/ docs/ inbox/) directly inside a node, something
 filed INSIDE a slot, or a CHILD NODE (it has its own README.md). Any other folder inside a
-node is LIMBO: the owner's, reported as a note and never a failure. A leftover _tmp/ is the
-slot inbox/ replaced in 0.5.0, reported as legacy. A folder under spaces/ whose parent is
-not a node is still a problem: that is a node missing its README.
+node is LIMBO: the owner's, reported as a note and never a failure. A folder under spaces/
+whose parent is not a node is still a problem: that is a node missing its README.
 
 A node whose docs/drive is linked declares where that folder lives in Drive with an
 `artifacts:` key in its README frontmatter. Readers that cannot follow the symlink -- the
@@ -38,7 +37,6 @@ import os, sys, json, pathlib, re, subprocess, unicodedata, datetime, html, plat
 import shutil, string, urllib.parse
 
 SLOTS = ("notes", "log", "docs", "inbox")
-LEGACY = "_tmp"                  # the slot inbox/ replaced in 0.5.0
 REQUIRED = ("notes", "log")
 ROOT_INBOX = "00-inbox"
 LARGE = 1024 * 1024              # a tracked file in a slot above this gets a warning
@@ -52,7 +50,7 @@ problems, warns, notes = [], [], []
 # What the status page shows beside the findings, by node (None is the brain). Filled by
 # the same checks that print, so every number on the page is one the text output gave.
 facts = {}
-# Every directory under spaces/, NFC-keyed: container, node, slot, inslot, limbo, legacy
+# Every directory under spaces/, NFC-keyed: container, node, slot, inslot, limbo
 # or orphan. Kept after the walk so later checks can tell slot content from limbo.
 status = {}
 # What a failed git query left unknown ("local", "ages"): shown as not checked, never 0.
@@ -103,7 +101,7 @@ def scan(root):
 
         if pstat in ("slot", "inslot"):
             status[here] = "inslot"
-        elif pstat in ("orphan", "legacy"):
+        elif pstat == "orphan":
             status[here] = pstat                  # already reported at the top
         elif pstat == "limbo":
             status[here] = "limbo"
@@ -114,11 +112,6 @@ def scan(root):
                      f"too", node=node_of(parent))
         elif base in SLOTS and pstat == "node":
             status[here] = "slot"
-        elif base == LEGACY and pstat == "node":
-            status[here] = "legacy"
-            fact(parent)["legacy"] = rel
-            note(f"{rel}/ is a legacy _tmp/ -- not a slot since 0.5.0 and still "
-                 f"gitignored; move what should be filed into inbox/ by hand", node=parent)
         elif "README.md" in filenames:
             status[here] = "node"
             found.append(pathlib.Path(dirpath))
@@ -272,8 +265,7 @@ def node_of(path):
 def check_local_only():
     """Files git ignores under spaces/ and 00-inbox/: they exist on this machine only.
 
-    docs/drive is excluded (the cloud holds it), and so are dotfiles and legacy _tmp/,
-    which is already reported as a whole.
+    docs/drive is excluded (the cloud holds it), and so are dotfiles.
     """
     out = git_query("Files only on this machine", "ls-files", "-z", "-o", "-i",
                     "--exclude-standard", "--", "spaces", ROOT_INBOX)
@@ -284,8 +276,6 @@ def check_local_only():
     for path in out.split("\0"):
         folder = os.path.dirname(path)
         if not path or any(part.startswith(".") for part in path.split("/")):
-            continue
-        if status.get(nfc(folder)) == "legacy":
             continue
         if path.endswith("/docs/drive") and status.get(nfc(folder)) == "slot":
             continue                              # the symlink itself; git never follows it
@@ -492,7 +482,7 @@ def declared_artifacts(text):
 
 
 def drive_root_of(target):
-    """'/Users/x/.../GoogleDrive-x/My Drive/Guitarra' -> 'My Drive/Guitarra', else None."""
+    """'/Users/x/.../GoogleDrive-x/My Drive/House' -> 'My Drive/House', else None."""
     parts = [nfc(p) for p in re.split(r"[\\/]+", target) if p]
     for i, part in enumerate(parts):
         if part in DRIVE_ANCHORS:
@@ -854,8 +844,8 @@ def attention_html():
 def notes_html():
     """Notes, with the ones that differ only in their node folded into one line.
 
-    Ten nodes with a legacy _tmp/ make ten notes that say the same thing; the page shows
-    the sentence once and lists the nodes under it.
+    Ten nodes with the same limbo folder make ten notes that say the same thing; the page
+    shows the sentence once and lists the nodes under it.
     """
     groups = {}
     for at, msg in notes:
@@ -924,8 +914,6 @@ def node_row(node, in_git):
         k = sum(1 for at, _ in items if at == node)
         if k:
             chips += f'<span class="chip c-{cls}">{plural(k, word)}</span>'
-    if f.get("legacy"):
-        chips += '<span class="chip c-muted" title="legacy _tmp/">_tmp</span>'
     branch = '<span class="branch">└</span>' if depth else ""
     undistilled = f.get("undistilled")
     limbo = f.get("limbo", [])
@@ -1085,10 +1073,6 @@ def main():
     if not root.is_dir():
         sys.exit("no spaces/ -- run from the repo root. Every brain has spaces/ at its "
                  "root; it is where all content lives")
-
-    if pathlib.Path("areas").exists():
-        problem("legacy areas/ exists beside spaces/ -- new Itakua brains use only "
-                "spaces/. Do not migrate an existing brain without owner approval")
 
     in_git = "--no-git" not in args and git("rev-parse", "--git-dir") is not None
     found = scan(root)

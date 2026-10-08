@@ -59,7 +59,6 @@ class StatusPageTests(unittest.TestCase):
         write(work / "log" / "older" / "2026-08-01-call.md", "---\ntype: log\n---\n")
         write(work / "log" / "2026-09-03-call.md", "---\ntype: log\n---\n")
         write(work / "scratch" / "idea.md")
-        write(guitar / "_tmp" / "old.m4a")
 
     def validate(self, brain, *args):
         result = run([sys.executable, str(VALIDATOR), *args], cwd=brain)
@@ -201,13 +200,13 @@ class StatusPageTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             brain = self.brain(temp)
             for node in ("guitar", "work"):
-                write(brain / "spaces" / node / "_tmp" / "old.txt")
+                write(brain / "spaces" / node / "scratch" / "old.txt")
 
             result = self.validate(brain, "--report")
 
-            self.assertEqual(result.stdout.count("is a legacy _tmp/"), 2)
+            self.assertEqual(result.stdout.count("/scratch/ is limbo"), 2)
             page = self.page(brain)
-            self.assertEqual(page.count("is a legacy _tmp/"), 1)
+            self.assertEqual(page.count("/scratch/ is limbo"), 1)
             self.assertIn("2 nodes", page)
             for node in ("spaces/guitar", "spaces/work"):
                 self.assertIn(f"<li>{node}</li>", page)

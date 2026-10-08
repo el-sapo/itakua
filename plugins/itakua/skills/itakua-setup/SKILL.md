@@ -85,10 +85,10 @@ absolute overrides for genuine machine exceptions. Local entries win.
 
 ```text
 # drive-map
-guitar|Guitarra
+french|French class
 
 # .drive-map.local
-shared-project|/absolute/path/outside/the/common/root
+work/team|/absolute/path/outside/the/common/root
 ```
 
 Run from the brain root:
