@@ -1,5 +1,5 @@
 # Machine-specific Drive overrides. Copy to .drive-map.local at the ROOT of your brain
-# (beside spaces/), keep it gitignored, and edit only the exceptional nodes.
+# (beside spaces/), never sync it, and edit only the exceptional nodes.
 # Format: <node path>|<absolute target on THIS machine>
 #
 # The node path is relative to spaces/ — 'french', not 'spaces/french'. That is also how

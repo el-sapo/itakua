@@ -1,7 +1,7 @@
 {
   "name": "itakua",
-  "version": "0.7.1",
-  "description": "Itakua knowledge framework with separate operating and machine-setup skills.",
+  "version": "0.8.0",
+  "description": "Itakua knowledge framework: itakua-map to operate a brain, itakua-setup to stand one up, itakua-sync for whatever carries it between machines.",
   "author": {
     "name": "Federico Lagarmilla",
     "url": "https://github.com/el-sapo"
@@ -19,7 +19,7 @@
   "interface": {
     "displayName": "Itakua",
     "shortDescription": "A portable, agent-friendly personal knowledge framework.",
-    "longDescription": "Operate and set up an Itakua knowledge base with nested nodes, approval-aware slots, portable Drive mappings, and validation tooling.",
+    "longDescription": "Operate, set up and sync an Itakua knowledge base: nested nodes, approval-aware slots, portable Drive mappings, and validation tooling. A brain is a folder of plain files and needs no sync.",
     "developerName": "Federico Lagarmilla",
     "category": "Productivity",
     "capabilities": [

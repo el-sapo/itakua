@@ -114,7 +114,7 @@ class BrainMixin:
 
     def run_validator(self, brain, env=None):
         result = subprocess.run(
-            [sys.executable, str(VALIDATOR), "--no-git"],
+            [sys.executable, str(VALIDATOR)],
             cwd=brain, capture_output=True, text=True, timeout=20,
             env=env or no_xattr_env(),
         )

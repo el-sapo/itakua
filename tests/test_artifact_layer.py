@@ -1,4 +1,4 @@
-"""Behavioral regressions for the git/cloud artifact boundary.
+"""Behavioral regressions for the brain/cloud artifact boundary.
 
 These tests intentionally execute the public scripts against small temporary brains.
 They assert only user-visible outcomes and filesystem effects so the scripts can keep
@@ -45,7 +45,7 @@ class ArtifactLayerBehaviorTests(unittest.TestCase):
 
     def run_validator(self, brain):
         return subprocess.run(
-            [sys.executable, str(VALIDATOR), "--no-git"],
+            [sys.executable, str(VALIDATOR)],
             cwd=brain,
             capture_output=True,
             text=True,
@@ -177,8 +177,6 @@ class ArtifactLayerBehaviorTests(unittest.TestCase):
                     str(NEW_BRAIN),
                     str(brain),
                     "Portable Brain",
-                    "--identity",
-                    "Test User <test@example.com>",
                 ],
                 capture_output=True,
                 text=True,
@@ -187,10 +185,8 @@ class ArtifactLayerBehaviorTests(unittest.TestCase):
 
             self.assertEqual(created.returncode, 0, created.stdout + created.stderr)
             readme = (brain / "README.md").read_text(encoding="utf-8")
-            pointers = "\n".join(
-                (brain / name).read_text(encoding="utf-8")
-                for name in ("CLAUDE.md", "AGENTS.md")
-            )
+            pointers = (brain / "AGENTS.md").read_text(encoding="utf-8")
+            self.assertFalse((brain / "CLAUDE.md").exists())
             self.assertFalse((brain / "skill").exists())
             self.assertNotIn(str(REPO_ROOT), readme)
             self.assertNotIn("plugins/cache", readme)

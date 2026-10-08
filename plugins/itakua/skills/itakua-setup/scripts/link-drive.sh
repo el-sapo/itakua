@@ -11,7 +11,7 @@
 #   house/renovation|House/Renovation
 #
 # The right side is relative to the machine-local root supplied on the command line.
-# Genuine machine exceptions live in gitignored `.drive-map.local` as absolute targets:
+# Genuine machine exceptions live in `.drive-map.local`, which never leaves this machine:
 #
 #   work/team|/absolute/path/on/this/machine/Team
 #

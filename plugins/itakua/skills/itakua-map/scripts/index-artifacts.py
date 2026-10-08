@@ -8,10 +8,10 @@
 Run it from the brain's root. The regeneration line written into each index names the
 owning skill without persisting this machine's installed-skill or plugin-cache path.
 
-The index is the bridge across the git/cloud boundary. Running this command is an
+The index is the bridge across the brain/cloud boundary. Running this command is an
 explicit request to create or replace the durable `docs/index.md`; do not run it in an
 unattended pass. The files themselves are
-gitignored, so this generated list is what travels with the repo and is all cloud
+never in the brain, so this generated list is what travels with it and is all cloud
 chat can see. Regenerate it; never hand-edit.
 
 LANGUAGE: the index follows the NODE's language, detected from its own README and
@@ -81,14 +81,14 @@ STRINGS = {
         "th_file":    "| Archivo | Tipo | Tamaño | Enlace |",
         "ptr_head":   "## ⚠️ Punteros de Google pendientes",
         "ptr_body":   ["Cada uno pesa 176 bytes y **no se puede leer ni editar en disco** — son enlaces.",
-                       "Migrar a markdown en git, o exportar a un formato real.",
+                       "Migrar a markdown en el brain, o exportar a un formato real.",
                        "Si alguno debe quedarse así, agregarlo a `docs/pointers-ok.md`."],
         "ptr_th":     "| Archivo | Tipo | Enlace |",
         "ptr_ok":     "## Punteros aceptados ({n})",
         "ptr_ok_sub": "Se quedan como Google Docs a propósito — ver `docs/pointers-ok.md`.",
         "orph_head":  "## 🚨 Archivos huérfanos — en NINGÚN sistema",
         "orph_lead":  "**{n} archivos ({size})** están dentro de `docs/` pero fuera de `docs/drive/`.",
-        "orph_bul":   ["- `**/docs/*` los ignora → **no están en git**",
+        "orph_bul":   ["- Están fuera de `docs/drive/` → **no viajan con el brain** (ningún sync los respalda)",
                        "- No cuelgan del symlink → **no están en Drive**"],
         "orph_tail":  "No tienen respaldo en ningún lado. Moverlos a `docs/drive/` o pedir aprobación al dueño antes de borrarlos.",
         "orph_th":    "| Archivo |",
@@ -108,14 +108,14 @@ STRINGS = {
         "th_file":    "| File | Type | Size | Link |",
         "ptr_head":   "## ⚠️ Google pointers to deal with",
         "ptr_body":   ["Each is 176 bytes and **cannot be read or edited on disk** — they are links.",
-                       "Migrate to markdown in git, or export to a real format.",
+                       "Migrate to markdown in the brain, or export to a real format.",
                        "If one should stay as it is, add it to `docs/pointers-ok.md`."],
         "ptr_th":     "| File | Kind | Link |",
         "ptr_ok":     "## Accepted pointers ({n})",
         "ptr_ok_sub": "Deliberately left as Google files — see `docs/pointers-ok.md`.",
         "orph_head":  "## 🚨 Orphan files — in NO system at all",
         "orph_lead":  "**{n} files ({size})** are inside `docs/` but outside `docs/drive/`.",
-        "orph_bul":   ["- `**/docs/*` ignores them → **not in git**",
+        "orph_bul":   ["- They sit outside `docs/drive/` → **not carried with the brain** (no sync backs them up)",
                        "- They do not hang off the symlink → **not in cloud storage**"],
         "orph_tail":  "They are backed up nowhere. Move them under `docs/drive/`, or obtain owner approval before deleting them.",
         "orph_th":    "| File |",
@@ -444,7 +444,7 @@ def main():
         out.append("")
 
     # --- guard: files parked in docs/ but not under docs/drive/ ---
-    # gitignored by **/docs/*, and outside the symlink, so in NEITHER git NOR cloud.
+    # outside the symlink, so not in the cloud, and excluded from every sync's rules.
     orphans, orphan_bytes = [], 0
     docs_dir = os.path.join(node, "docs")
     if os.path.isdir(docs_dir):
@@ -502,7 +502,7 @@ def main():
               f"own Copy link")
     if orphans:
         print(f"  🚨 WARNING: {len(orphans)} orphan file(s) ({human(orphan_bytes)}) in "
-              f"{docs_dir} are in NEITHER git NOR cloud storage — move them under docs/drive/")
+              f"{docs_dir} are in NEITHER the cloud NOR any sync — move them under docs/drive/")
 
 
 main()

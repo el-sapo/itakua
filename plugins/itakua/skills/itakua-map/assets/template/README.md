@@ -31,7 +31,7 @@ tags: []
 | `notes/` | Distilled knowledge. Mutable with owner approval as understanding improves. |
 | `log/` | Dated raw evidence. Append-only; correct by adding a later entry. |
 | `docs/` | *Optional.* Cloud-synced artifacts + generated `index.md`. Durable writes require owner approval. Once `docs/drive` is linked, declare its Drive folder in the `artifacts:` frontmatter key, and optionally its link from Drive's *Copy link*. Remove this row if unused. |
-| `inbox/` | Captured, not yet filed. Anyone may add; text is tracked, other files stay on this machine. Nothing here is a source, nothing processes it unattended, and removing an item needs owner approval. |
+| `inbox/` | Captured, not yet filed. Anyone may add. Nothing here is a source, nothing processes it unattended, and removing an item needs owner approval. |
 | `<child>/` | *Optional.* A nested node with its own `README.md` — e.g. a project inside a space. |
 
 > A folder is either a **slot** (the four above) or a **child node** (it has a `README.md`).

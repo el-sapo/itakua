@@ -1,12 +1,13 @@
 # Itakua
 
 Itakua is a portable, agent-friendly framework for a personal knowledge base. It keeps
-distilled knowledge in Markdown, raw evidence in append-only logs, large artifacts in
-cloud storage, with normal operating rules in `itakua-map` and machine setup in
-`itakua-setup`.
+distilled knowledge in Markdown, raw evidence in append-only logs, and large artifacts
+in cloud storage. A brain is a folder of plain files: it needs no sync, and takes any.
 
-The project ships one plugin, [`itakua`](plugins/itakua), for both Claude and Codex.
-Both hosts load the same two skills; only their discovery manifests differ.
+The project ships one plugin, [`itakua`](plugins/itakua), for both Claude and Codex, with
+three skills: `itakua-map` for normal operation, `itakua-setup` to stand a brain up on a
+machine, and `itakua-sync` for whatever carries it between machines. Both hosts load the
+same skills; only their discovery manifests differ.
 
 ## The model
 
@@ -14,10 +15,10 @@ Every brain stores its nodes under `spaces/`. Every node has four slots:
 
 - `notes/` — distilled knowledge; agents may edit it only with owner approval.
 - `log/` — dated raw evidence; append-only and never silently rewritten.
-- `docs/` — optional durable artifacts; creation or editing requires owner approval.
-- `inbox/` — captured, not yet filed; text is tracked, other files stay on the machine.
-  Nothing there is a source, nothing processes it unattended, and nothing is removed
-  without owner approval.
+- `docs/` — optional durable artifacts in cloud storage; creation or editing requires
+  owner approval. No sync ever carries the `docs/drive` link.
+- `inbox/` — captured, not yet filed. Nothing there is a source, nothing processes it
+  unattended, and nothing is removed without owner approval.
 
 Any other folder inside a node is limbo: the owner's own space, which agents leave alone.
 
@@ -39,7 +40,7 @@ codex plugin marketplace add el-sapo/itakua
 codex plugin add itakua@itakua
 ```
 
-Start a new Codex task afterwards so it discovers `itakua-map` and `itakua-setup`.
+Start a new Codex task afterwards so it discovers the skills.
 
 ## Validate a checkout
 
