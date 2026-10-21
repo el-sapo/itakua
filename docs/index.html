@@ -187,7 +187,7 @@
         <rect x="687" y="150" width="177" height="86" rx="4" fill="none" class="s-ink" stroke-width="1" stroke-dasharray="4 4" opacity="0.6"></rect>
         <text x="775" y="176" text-anchor="middle" font-size="13" font-weight="500" class="t-mono d-ink">inbox/</text>
         <text x="775" y="196" text-anchor="middle" font-size="11" class="t-body d-mut">captured, not filed</text>
-        <text x="775" y="212" text-anchor="middle" font-size="11" class="t-body d-mut">never processed unattended</text>
+        <text x="775" y="212" text-anchor="middle" font-size="11" class="t-body d-mut">unattended only by contract</text>
 
         <!-- arrows down to storage -->
         <path d="M 202 236 L 202 285 L 290 285 L 290 322" fill="none" class="s-git" stroke-width="1.4" marker-end="url(#ar-git)"></path>
@@ -228,7 +228,7 @@
 
   <p><strong><span class="path-cloud">docs/</span> is the durable-artifact boundary.</strong> Creation and editing require owner approval. Binaries live in cloud storage; the brain holds an approved generated index so the Markdown side knows what exists.</p>
 
-  <p><strong><span class="path">inbox/</span> is captured, not filed.</strong> New nodes include it by default. For now capture tools write to the brain's root <span class="path">00-inbox/</span>, and an item moves into a node's inbox when the owner sorts it. Nothing there is a source, unattended passes do not process it, and nothing is removed without owner approval.</p>
+  <p><strong><span class="path">inbox/</span> is captured, not filed.</strong> New nodes include it by default. For now capture tools write to the brain's root <span class="path">00-inbox/</span>, and an item moves into a node's inbox when the owner sorts it. Nothing there is a source, unattended passes do not process it unless a node's contract says notify, and nothing is removed without owner approval.</p>
 
   <h2>Install with Claude</h2>
   <pre>claude plugin marketplace add el-sapo/itakua --scope user
