@@ -171,6 +171,11 @@ def check_contracts(found):
     for n in found:
         path = n / "README.md"
         readme = path.read_text(encoding="utf-8")
+        for line in readme.splitlines():
+            if re.match(r"\s*#+\s*contra", line, re.I) \
+                    and not re.fullmatch(r"##\s+Contracts\s*", line):
+                warn(f"{path} has the heading {line.strip()}; only ## Contracts, as "
+                     f"written, is read as the contracts table", node=key(n))
         for cells in contract_rows(readme):
             slot = cells[0].strip("`").strip()
             mode = cells[1].strip("`").strip() if len(cells) > 1 else ""

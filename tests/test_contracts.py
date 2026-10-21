@@ -123,6 +123,17 @@ class ContractsTests(unittest.TestCase):
             self.add_rows(node, "| `inbox/` | manual | only on request | asks |")
             self.assertEqual(self.warns(self.validate(brain)), [])
 
+    def test_a_contracts_heading_in_another_form_is_warned(self):
+        with tempfile.TemporaryDirectory() as temp:
+            brain, node = self.brain(temp)
+            readme = node / "README.md"
+            text = readme.read_text(encoding="utf-8")
+            readme.write_text(text.replace("## Contracts", "## Contratos"), encoding="utf-8")
+            warns = self.warns(self.validate(brain))
+            self.assertEqual(len(warns), 1, warns)
+            self.assertIn("## Contratos", warns[0])
+            self.assertIn("## Contracts", warns[0])
+
     def pad_body(self, node, lines):
         """Pad the README so its body, front matter excluded, is exactly `lines` long."""
         readme = node / "README.md"

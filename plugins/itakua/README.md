@@ -34,9 +34,9 @@ with distinct triggers:
 
 The default safety contract is explicit: `inbox/` holds captured material that is not a
 source yet; nothing processes it unattended unless a node's contract says `notify`, and
-nothing is removed without owner approval. Capture tools (Dictalo, an agent saving a chat, a web clipper) write into the
-brain's root `00-inbox/` under the same contract; agents move an item into a node or mark
-it distilled only when asked. The loose capture format is in `itakua-map`, under
+nothing is removed without owner approval. Capture tools (Dictalo, an agent saving a
+chat, a web clipper) write into the brain's root `00-inbox/` under the same contract;
+agents move a `00-inbox/` item into a node or mark it distilled only when asked. The loose capture format is in `itakua-map`, under
 **Captures**. Any other folder inside a node is limbo, the owner's space, which agents
 leave alone. Agents need approval before editing `notes/` or creating/editing durable
 `docs/` content. Logs remain append-only raw evidence, with corrections added as new
