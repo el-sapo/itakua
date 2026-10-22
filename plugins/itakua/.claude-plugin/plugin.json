@@ -1,6 +1,6 @@
 {
   "name": "itakua",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "Itakua knowledge framework: itakua-map to operate a brain, itakua-setup to stand one up, itakua-sync for whatever carries it between machines.",
   "author": {
     "name": "Federico Lagarmilla"

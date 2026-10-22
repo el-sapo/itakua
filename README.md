@@ -18,7 +18,8 @@ Every brain stores its nodes under `spaces/`. Every node has four slots:
 - `docs/` — optional durable artifacts in cloud storage; creation or editing requires
   owner approval. No sync ever carries the `docs/drive` link.
 - `inbox/` — captured, not yet filed. Nothing there is a source, nothing processes it
-  unattended, and nothing is removed without owner approval.
+  unattended unless a node's contract says `notify`, and nothing is removed without owner
+  approval.
 
 Any other folder inside a node is limbo: the owner's own space, which agents leave alone.
 

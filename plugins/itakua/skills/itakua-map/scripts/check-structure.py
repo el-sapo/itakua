@@ -19,6 +19,12 @@ where this machine can read it, a missing url is proposed and a contradicting on
 Where it cannot -- Drive not running, another OS, a folder that does not carry it --
 nothing is said about url beyond the shape of a declared one.
 
+A node README may carry a `## Contracts` table: what an agent may do on one slot, or a
+folder inside it, without asking. A row whose slot is not one of the four, or does not
+exist in the node, or whose mode is neither manual nor notify, grants nothing while
+looking as if it did, so it is a WARNING. So is a README body over README_MAX_LINES:
+past that it stops being read, and the detail belongs in notes/.
+
 Structure only. A brain is a folder of plain files and needs no sync; whatever carries it
 between machines is checked by the itakua-sync skill's own script, never from here.
 
@@ -33,6 +39,8 @@ SLOTS = ("notes", "log", "docs", "inbox")
 REQUIRED = ("notes", "log")
 ROOT_INBOX = "00-inbox"
 REPORT = "status.html"
+MODES = ("manual", "notify")
+README_MAX_LINES = 120
 TEMPLATE = pathlib.Path(__file__).resolve().parent.parent / "assets" / "status-page.html"
 
 # Findings, each as (node, message): node is the NFC path of the node it is about, or None
@@ -133,6 +141,60 @@ def check_nodes(found):
             if not (n / s).is_dir() and f"`{s}/`" in readme \
                     and "*Unused" not in readme and "*Optional" not in readme:
                 note(f"{n}/README.md mentions {s}/, which does not exist", node=key(n))
+
+
+def contract_rows(readme):
+    """The data rows of the README's `## Contracts` table, each as a list of cells."""
+    rows, inside = [], False
+    for line in readme.splitlines():
+        if re.match(r"#{1,2}\s", line):
+            inside = re.fullmatch(r"##\s+Contracts\s*", line) is not None
+            continue
+        if inside and line.lstrip().startswith("|"):
+            cells = [c.strip() for c in line.strip().strip("|").split("|")]
+            if not all(re.fullmatch(r":?-+:?", c) for c in cells):
+                rows.append(cells)
+    return rows[1:]                                # the first row is the header
+
+
+def readme_body(readme):
+    """The README's lines after its frontmatter."""
+    lines = readme.splitlines()
+    if lines and lines[0].strip() == "---":
+        for i in range(1, len(lines)):
+            if lines[i].strip() in ("---", "..."):
+                return lines[i + 1:]
+    return lines
+
+
+def check_contracts(found):
+    for n in found:
+        path = n / "README.md"
+        readme = path.read_text(encoding="utf-8")
+        for line in readme.splitlines():
+            if re.match(r"\s*#+\s*contra", line, re.I) \
+                    and not re.fullmatch(r"##\s+Contracts\s*", line):
+                warn(f"{path} has the heading {line.strip()}; only ## Contracts, as "
+                     f"written, is read as the contracts table", node=key(n))
+        for cells in contract_rows(readme):
+            slot = cells[0].strip("`").strip()
+            mode = cells[1].strip("`").strip() if len(cells) > 1 else ""
+            parts = [p for p in slot.split("/") if p]
+            if not parts or parts[0] not in SLOTS or any(p in (".", "..") for p in parts):
+                warn(f"{path} has a contract for {slot or '(no slot)'}, which is not a slot "
+                     f"or a folder inside one -- the row grants nothing", node=key(n))
+            elif not (n / slot).is_dir():
+                warn(f"{path} has a contract for {slot}, which does not exist in {n}/ -- "
+                     f"the row grants nothing until it does", node=key(n))
+            if mode.lower() not in MODES:
+                warn(f"{path} has a contract for {slot or '(no slot)'} with mode "
+                     f"{mode or '(none)'}, which is not one of {', '.join(MODES)} -- "
+                     f"the row grants nothing", node=key(n))
+        length = len(readme_body(readme))
+        if length > README_MAX_LINES:
+            warn(f"{path} is {length} lines long, front matter excluded; past "
+                 f"{README_MAX_LINES} a README stops being read -- move detail into notes/",
+                 node=key(n))
 
 
 # --- inbox and log -----------------------------------------------------------------
@@ -801,6 +863,7 @@ def main():
 
     found = scan(root)
     check_nodes(found)
+    check_contracts(found)
     check_inbox(inboxes(found))
     check_distilled(found)
     check_artifacts(found)
